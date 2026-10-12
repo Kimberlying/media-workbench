@@ -1,0 +1,24 @@
+# LiteLLM 代理配置：把业务代码里的模型别名映射到真实模型。
+# 换模型只改这里。模型 ID 以各家当时的文档为准，上线前核对一遍。
+# 启动：docker run -p 4000:4000 -v $(pwd)/litellm/config.yaml:/app/config.yaml \
+#   -e XAI_API_KEY -e GEMINI_API_KEY -e LITELLM_MASTER_KEY ghcr.io/berriai/litellm:main-stable --config /app/config.yaml
+
+model_list:
+  - model_name: grok
+    litellm_params:
+      model: xai/grok-4-latest
+      api_key: os.environ/XAI_API_KEY
+
+  - model_name: gemini-flash
+    litellm_params:
+      model: gemini/gemini-flash-latest
+      api_key: os.environ/GEMINI_API_KEY
+
+  # 全网动态：请求里会带 googleSearch 工具（见 src/lib/llm/models.ts 的 STEP_PARAMS）
+  - model_name: gemini-search
+    litellm_params:
+      model: gemini/gemini-flash-latest
+      api_key: os.environ/GEMINI_API_KEY
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
