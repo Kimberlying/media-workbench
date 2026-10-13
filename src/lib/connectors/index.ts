@@ -5,7 +5,7 @@ import type { PlatformConnector } from "./types";
 import { xConnector } from "./x";
 
 export type { PlatformConnector, PublishInput, PublishResult, PublishPackage } from "./types";
-export { splitThread } from "./types";
+export { PublishRejected, splitThread } from "./types";
 
 const registry: Record<Platform, PlatformConnector> = {
   x: xConnector,

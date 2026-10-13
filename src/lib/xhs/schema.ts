@@ -81,12 +81,24 @@ export type ContentPack =
       checks: string[];
     }
   | {
+      /** X 短推：记下用的模型和处理方式，以及自动检查结果 */
+      kind: "post";
+      model: string;
+      mode: "topic" | "polish" | "translate";
+      /** 润色、翻译时的原始素材，「重出」时复用 */
+      source?: string;
+      checks: string[];
+    }
+  | {
       kind: "longform";
       title: string;
       /** 公众号横版贴图；X 长文为空 */
       graphics: CardsFile | null;
       checks: string[];
     };
+
+/** 能下载成发布包的：长文和小红书内容包 */
+export type DownloadablePack = Exclude<ContentPack, { kind: "post" }>;
 
 export const XHS_SIZE = { width: 1080, height: 1800 };
 export const WECHAT_SIZE = { width: 1200, height: 675 };

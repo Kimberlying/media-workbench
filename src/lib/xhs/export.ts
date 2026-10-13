@@ -1,5 +1,5 @@
 import { strToU8, zipSync } from "fflate";
-import type { ContentPack } from "./schema";
+import type { DownloadablePack } from "./schema";
 
 // 把内容包导出成 build-xhs-content-pack 的目录结构，下载后可以直接用它的脚本出图：
 //   python3 scripts/render_cards.py cards/cards.json --output-dir images
@@ -38,7 +38,7 @@ const REVIEW_TEMPLATE = `# 发布后复盘
 const checklist = (items: string[]) =>
   items.length ? items.map((i) => `- [ ] ${i}`).join("\n") : "- 自动检查没有发现问题";
 
-export function packFiles(input: { body: string; pack: ContentPack }): Record<string, string> {
+export function packFiles(input: { body: string; pack: DownloadablePack }): Record<string, string> {
   const { body, pack } = input;
 
   if (pack.kind === "xhs") {

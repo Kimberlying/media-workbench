@@ -1,3 +1,5 @@
+import { X_POST_MAX } from "@/lib/content/formats";
+import { countChars, MODE_LABELS } from "@/lib/content/x-post";
 import type { ContentPack } from "@/lib/xhs/schema";
 import { THEMES } from "@/lib/xhs/schema";
 import { ghostButtonClass } from "./ui";
@@ -12,7 +14,17 @@ const LAYOUT_LABELS: Record<string, string> = {
 };
 
 // 内容包的结构化部分：卡片顺序、标题备选、自动检查，以及下载发布包
-export function PackSummary({ contentId, pack }: { contentId: string; pack: ContentPack }) {
+export function PackSummary({ contentId, pack, body }: { contentId: string; pack: ContentPack; body: string }) {
+  if (pack.kind === "post") {
+    return (
+      <div className="mt-2 text-xs text-zinc-500">
+        {countChars(body)}/{X_POST_MAX} 字符 · {pack.mode === "topic" ? "按选题生成" : MODE_LABELS[pack.mode]} · 模型 {pack.model}
+        {pack.checks.length > 0 ? (
+          <span className="text-amber-700 dark:text-amber-400"> · 留意：{pack.checks.join("；")}</span>
+        ) : null}
+      </div>
+    );
+  }
   const cards = pack.kind === "xhs" ? pack.cards : pack.graphics;
   return (
     <div className="mt-3 grid gap-2 rounded border border-zinc-200 p-3 text-sm dark:border-zinc-800">

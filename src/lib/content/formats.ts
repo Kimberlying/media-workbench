@@ -28,7 +28,26 @@ const LONGFORM_RULES =
   "接着亮出核心观点，正文按逻辑分成 3–6 个小节（用 ## 二级标题），给出例子、边界和反例，" +
   "结尾落到读者能做的事。保留作者的个人判断，但不要把判断写成定论。";
 
+// X 短推的写法来自 tweet-buffer-workflow 的「润色」规则
+// https://github.com/Kimberlying/tweet-buffer-workflow
+export const X_POST_MAX = 250;
+
+export const X_POST_RULES =
+  `不超过 ${X_POST_MAX} 个字符；分成 2–4 个适合手机阅读的短段落；默认不用 emoji；` +
+  "保留原意、事实、数字、人名、链接和不确定性，不编造背景、来源和结果；" +
+  "结尾不用问号，不加「转发」「关注我」「评论区告诉我」一类引导互动的话。";
+
 export const FORMATS: FormatSpec[] = [
+  {
+    id: "x.post",
+    platform: "x",
+    format: "post",
+    label: "X 短推",
+    kind: "text",
+    step: "copy.x_post",
+    apiPublish: true,
+    guide: `写一条 X 短推：${X_POST_RULES}`,
+  },
   {
     id: "x.thread",
     platform: "x",

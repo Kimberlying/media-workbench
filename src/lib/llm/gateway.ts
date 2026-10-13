@@ -30,6 +30,8 @@ export interface GenerateOptions {
   messages: ChatMessage[];
   refId?: string;
   temperature?: number;
+  /** 手动指定模型别名，覆盖环节默认值 */
+  model?: string;
 }
 
 export interface GatewayConfig {
@@ -52,7 +54,7 @@ export class LlmGateway {
   async generate<T>(
     opts: GenerateOptions & { json?: false | z.ZodType<T> },
   ): Promise<string | T> {
-    const model = modelFor(opts.step);
+    const model = opts.model ?? modelFor(opts.step);
     const extra = STEP_PARAMS[opts.step];
     const doFetch = this.config.fetch ?? fetch;
 

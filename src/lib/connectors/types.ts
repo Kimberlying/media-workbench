@@ -35,6 +35,12 @@ export interface PlatformConnector {
   fetchMetrics(postIds: string[], ctx: ConnectorContext): Promise<Map<string, MetricSnapshot>>;
 }
 
+/**
+ * 平台明确拒绝、确定什么都没发出去时抛这个。
+ * 其他错误（网络中断、推文串发到一半）都算「结果不确定」，不能自动重发。
+ */
+export class PublishRejected extends Error {}
+
 export function splitThread(body: string): string[] {
   return body
     .split(/^\s*---\s*$/m)

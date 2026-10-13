@@ -1,8 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { checkTabooWords, parseTabooList } from "@/lib/content/compliance";
 import { variantOf, type FormatSpec } from "@/lib/content/formats";
+import { checkXPost, finishXPost } from "@/lib/content/x-post";
 import type { Account, AccountProfile, Topic } from "@/lib/db/types";
 import type { ChatMessage, LlmGateway } from "@/lib/llm";
+import { modelFor } from "@/lib/llm/models";
 import { checkBodyRepeatsCards, checkCards, checkRiskyClaims } from "@/lib/xhs/checks";
 import { buildWechatGraphicsPrompt, buildXhsPackPrompt, wechatAdaptation } from "@/lib/xhs/prompts";
 import {
@@ -127,12 +129,18 @@ async function generateOne(
   const base = { orgId: account.org_id, refId: topic.id };
 
   if (format.kind === "text") {
-    const body = await llm.generate({
+    const raw = await llm.generate({
       ...base,
       step: format.step,
       messages: buildCopyPrompt(topic, account, profile, knowledge, format),
     });
-    return { body, pack: null, text: [body] };
+    if (format.id !== "x.post") return { body: raw, pack: null, text: [raw] };
+    const body = finishXPost(raw);
+    return {
+      body,
+      pack: { kind: "post", model: modelFor(format.step), mode: "topic", checks: checkXPost(body) },
+      text: [body],
+    };
   }
 
   if (format.kind === "longform") {

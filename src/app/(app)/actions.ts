@@ -4,7 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { checkTabooWords } from "@/lib/content/compliance";
-import { getFormat } from "@/lib/content/formats";
+import { getFormat, variantOf } from "@/lib/content/formats";
+import { rewriteMaterial, type RewriteMode } from "@/lib/content/x-post";
+import { getGateway } from "@/lib/llm";
+import { MODEL_CHOICES } from "@/lib/llm/models";
+import { createAdminClient } from "@/lib/supabase/admin";
+import type { ContentPack } from "@/lib/xhs/schema";
 import { assertTransition } from "@/lib/content/status";
 import type { ContentStatus, KnowledgeType, Platform } from "@/lib/db/types";
 import { weekStart } from "@/lib/dates";
@@ -261,4 +266,122 @@ export async function markPublishedManually(contentId: string, formData: FormDat
     platform_post_id: String(formData.get("url") ?? "") || null,
     method: "manual",
   });
+}
+
+// ---------------------------------------------------------------------------
+// X 短推：素材润色 / 翻译（tweet-buffer-workflow 的流程）
+// 生成的稿子停在草稿，人看过、提交后才会进入排期和发布。
+// ---------------------------------------------------------------------------
+
+const RewriteInput = z.object({
+  accountId: z.string().uuid(),
+  mode: z.enum(["polish", "translate"]),
+  model: z.enum(MODEL_CHOICES as [string, ...string[]]).optional(),
+  material: z.string().trim().min(1).max(8000),
+});
+
+async function loadXAccount(accountId: string) {
+  const { supabase } = await requireSession();
+  const { data, error } = await supabase
+    .from("accounts")
+    .select("id, org_id, handle, platform, profile:account_profiles(tone, taboo, language), workspace_id")
+    .eq("id", accountId)
+    .eq("platform", "x")
+    .single();
+  if (error) throw new Error("找不到这个 X 账号");
+  const profile = data.profile as unknown as { tone: string; taboo: string[]; language: string } | null;
+  return { supabase, account: data, profile };
+}
+
+async function writeXPost(
+  accountId: string,
+  mode: RewriteMode,
+  material: string,
+  model: string | undefined,
+  contentId?: string,
+) {
+  const { user } = await requireSession();
+  const { supabase, account, profile } = await loadXAccount(accountId);
+  const { body, pack } = await rewriteMaterial(getGateway(), {
+    orgId: account.org_id,
+    handle: account.handle,
+    tone: profile?.tone ?? "",
+    mode,
+    material,
+    model,
+  });
+  const knowledge = await loadKnowledge(supabase, account.workspace_id);
+  const compliance = checkTabooWords(body, [...(profile?.taboo ?? []), ...knowledge.tabooWords]);
+  const row = { body, pack, compliance_hits: compliance.hits, updated_by: user.id };
+
+  if (contentId) {
+    const { error } = await supabase.from("contents").update(row).eq("id", contentId).eq("status", "draft");
+    if (error) throw new Error(error.message);
+  } else {
+    const { error } = await supabase.from("contents").insert({
+      ...row,
+      org_id: account.org_id,
+      account_id: account.id,
+      variant: variantOf(getFormat("x.post"), profile?.language ?? "zh-CN"),
+      status: "draft",
+      created_by: user.id,
+    });
+    if (error) throw new Error(error.message);
+  }
+  revalidatePath("/contents");
+}
+
+export async function rewriteToXPost(formData: FormData) {
+  const input = RewriteInput.parse({
+    accountId: formData.get("accountId"),
+    mode: formData.get("mode"),
+    model: formData.get("model") || undefined,
+    material: formData.get("material"),
+  });
+  await writeXPost(input.accountId, input.mode, input.material, input.model);
+  redirect("/contents?status=draft");
+}
+
+/** 重出：用同一份素材、同样的处理方式再写一版，替换当前草稿 */
+export async function regenerateXPost(contentId: string) {
+  const { supabase } = await requireSession();
+  const { data, error } = await supabase
+    .from("contents")
+    .select("account_id, pack, status")
+    .eq("id", contentId)
+    .single();
+  if (error) throw new Error(error.message);
+  const pack = data.pack as ContentPack | null;
+  if (data.status !== "draft" || pack?.kind !== "post" || pack.mode === "topic" || !pack.source) {
+    throw new Error("只有素材改写出来的草稿可以重出");
+  }
+  await writeXPost(data.account_id, pack.mode, pack.source, pack.model, contentId);
+}
+
+// ---------------------------------------------------------------------------
+// 发布结果不确定：后台发布中断时不会自动重发，由人到 X 上核对后在这里登记
+// ---------------------------------------------------------------------------
+
+export async function resolveUncertainPublish(contentId: string, formData: FormData) {
+  const { supabase } = await requireSession();
+  // 先用当前用户身份确认看得到这条内容
+  const { data: content } = await supabase.from("contents").select("id").eq("id", contentId).single();
+  if (!content) throw new Error("找不到内容");
+
+  const admin = createAdminClient();
+  const outcome = String(formData.get("outcome"));
+  if (outcome === "published") {
+    const url = String(formData.get("url") ?? "");
+    const tweetId = url.match(/status\/(\d+)/)?.[1] ?? (url || null);
+    await admin
+      .from("posts")
+      .update({ platform_post_id: tweetId })
+      .eq("content_id", contentId)
+      .is("platform_post_id", null);
+    await admin.from("contents").update({ status: "published" }).eq("id", contentId).eq("status", "scheduled");
+  } else {
+    // 确认没发出去：去掉占位记录，下一轮会重新发布
+    await admin.from("posts").delete().eq("content_id", contentId).is("platform_post_id", null);
+  }
+  revalidatePath("/contents");
 }

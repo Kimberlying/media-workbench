@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import type { ContentPack } from "@/lib/xhs/schema";
+import type { ContentPack, DownloadablePack } from "@/lib/xhs/schema";
 import { packFiles, zipPack } from "@/lib/xhs/export";
 import { createClient } from "@/lib/supabase/server";
 
@@ -13,9 +13,11 @@ export async function GET(_request: NextRequest, ctx: RouteContext<"/api/content
     .eq("id", id)
     .maybeSingle();
   if (error || !data) return NextResponse.json({ error: "找不到内容" }, { status: 404 });
-  if (!data.pack) return NextResponse.json({ error: "这条内容没有发布包" }, { status: 400 });
+  if (!data.pack || (data.pack as ContentPack).kind === "post") {
+    return NextResponse.json({ error: "这条内容没有发布包" }, { status: 400 });
+  }
 
-  const zip = zipPack(packFiles({ body: data.body, pack: data.pack as ContentPack }));
+  const zip = zipPack(packFiles({ body: data.body, pack: data.pack as DownloadablePack }));
   const name = `${String(data.variant).replaceAll(":", "_")}_${String(data.id).slice(0, 8)}.zip`;
   return new NextResponse(Buffer.from(zip), {
     headers: {
