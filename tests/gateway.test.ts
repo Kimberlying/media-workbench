@@ -61,6 +61,44 @@ describe("模型网关", () => {
     expect(out).toEqual({ n: 3 });
   });
 
+  it("带工具时走 Responses 接口，拼出文本并记录用量", async () => {
+    const records: UsageRecord[] = [];
+    const fetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          output: [
+            { type: "x_search_call" },
+            { type: "message", content: [{ type: "output_text", text: '{"n":' }, { type: "output_text", text: " 2}" }] },
+          ],
+          usage: { input_tokens: 50, output_tokens: 10 },
+        }),
+      ),
+    );
+    const gw = new LlmGateway({
+      baseUrl: "http://gw",
+      apiKey: "k",
+      fetch,
+      usage: { record: async (u) => void records.push(u) },
+    });
+    const tool = { type: "x_search", from_date: "2026-10-12", to_date: "2026-10-14" };
+    const out = await gw.generate({
+      orgId: null,
+      step: "radar.x",
+      messages: [{ role: "user", content: "找热点" }],
+      tools: [tool],
+      json: z.object({ n: z.number() }),
+    });
+
+    expect(out).toEqual({ n: 2 });
+    const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("http://gw/v1/responses");
+    const body = JSON.parse(String(init.body));
+    expect(body.input).toEqual([{ role: "user", content: "找热点" }]);
+    expect(body.tools).toEqual([tool]);
+    expect(body.response_format).toBeUndefined();
+    expect(records[0]).toMatchObject({ step: "radar.x", model: "grok", input_tokens: 50, output_tokens: 10 });
+  });
+
   it("环境变量可以覆盖某个环节的模型", () => {
     expect(modelFor("copy.post", '{"copy.post":"gemini-pro"}')).toBe("gemini-pro");
     expect(modelFor("copy.post", "不是 JSON")).toBe("gemini-flash");

@@ -8,7 +8,7 @@
 
 | 模块 | 做什么 | 代码 |
 | --- | --- | --- |
-| 资讯雷达 | 每天 7 点（北京时间）按账号档案抓 X 热点和全网动态，入共享资讯池 | `src/lib/pipeline/radar.ts` |
+| 资讯雷达 | 每天 7 点（北京时间）让 Grok 按账号档案实时搜 X 上过去 24 小时的热点（xAI 的 `x_search` 工具），入共享资讯池 | `src/lib/pipeline/radar.ts` |
 | 选题策划 | 按账号档案从资讯池筛选题，带热度与相关性评分；可排进周日历 | `src/lib/pipeline/topics.ts` |
 | 文案生成 | 一个选题按所选账号和形式一次出多个版本，套档案语气和知识库 | `src/lib/pipeline/copywriting.ts`、`src/lib/content/formats.ts` |
 | X 短推 | 从选题生成，或把一段素材「润色」「翻译」成一条短推；不超过 250 字、无 emoji、不以问号结尾、不加互动引导，可选模型、可重出。规则沿用 [tweet-buffer-workflow](https://github.com/Kimberlying/tweet-buffer-workflow) | `src/lib/content/x-post.ts`、`src/app/(app)/contents/rewrite-form.tsx` |
@@ -42,7 +42,7 @@ python3 scripts/render_cards.py <发布包>/cards/cards.json --output-dir <发�
 - **Next.js 16**（App Router、Server Actions）：页面和接口一套代码
 - **Supabase**：Postgres、邮箱登录、行级安全
 - **Inngest**：定时抓资讯、批量生成、定时发布、拉数据，可重试、看日志
-- **LiteLLM 代理**：业务代码只用模型别名（`grok`、`gemini-flash`、`gemini-search`），每个环节用哪个模型在 `src/lib/llm/models.ts` 和 `litellm/config.yaml` 里配
+- **LiteLLM 代理**：业务代码只用模型别名（`grok`、`gemini-flash`），每个环节用哪个模型在 `src/lib/llm/models.ts` 和 `litellm/config.yaml` 里配
 - 平台令牌 AES-256-GCM 加密存在 `account_secrets`，这张表不开放任何 RLS 策略，只有后台任务能读
 
 流水线按固定顺序跑，大模型只负责每一步里的生成，不让 Agent 自由调度。
@@ -76,4 +76,4 @@ npm run build
 ## 上线前要核实
 
 - X API 的套餐、发帖和读数据的额度与价格
-- `litellm/config.yaml` 里的模型 ID，以及 Grok 搜 X 的参数（`src/lib/llm/models.ts` 的 `STEP_PARAMS`）
+- `litellm/config.yaml` 里的模型 ID，以及 LiteLLM 能否把带 `x_search` 工具的 Responses 请求（`/v1/responses`）转给 xAI；不行的话资讯雷达直连 xAI
