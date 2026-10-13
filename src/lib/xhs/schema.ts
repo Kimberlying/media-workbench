@@ -84,9 +84,11 @@ export type ContentPack =
       /** X 短推：记下用的模型和处理方式，以及自动检查结果 */
       kind: "post";
       model: string;
-      mode: "topic" | "polish" | "translate";
-      /** 润色、翻译时的原始素材，「重出」时复用 */
+      mode: "topic" | "polish" | "translate" | "news";
+      /** 润色、翻译、资讯点评时的原始素材，「重出」时复用 */
       source?: string;
+      /** 资讯点评：对应的资讯 */
+      newsId?: string;
       checks: string[];
     }
   | {

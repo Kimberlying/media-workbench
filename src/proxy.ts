@@ -1,7 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/auth", "/api/inngest"];
+// /api/digest 用自己的口令鉴权（给 Mac 上的 Obsidian 同步脚本）
+const PUBLIC_PATHS = ["/login", "/auth", "/api/inngest", "/api/digest"];
 
 // 刷新 Supabase 会话；未登录访问工作台页面时跳到登录页。
 export async function proxy(request: NextRequest) {
