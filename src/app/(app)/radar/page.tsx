@@ -21,7 +21,7 @@ export default async function RadarPage({ searchParams }: PageProps<"/radar">) {
         ) : null}
       </PageHeader>
       {items.length === 0 ? (
-        <Empty>还没有资讯。每天早上 7 点（北京时间）按账号档案自动抓取；先去「账号与档案」填好档案。</Empty>
+        <Empty>还没有资讯。每天早上 7 点（北京时间）从固定信源和 X 自动抓取；先去「账号与档案」填好档案。</Empty>
       ) : (
         <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
           {items.map((n) => (
@@ -31,7 +31,8 @@ export default async function RadarPage({ searchParams }: PageProps<"/radar">) {
               </a>
               <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{n.summary}</p>
               <div className="mt-1 flex flex-wrap gap-2 text-xs text-zinc-500">
-                <span>{n.source === "x" ? "X" : "全网"}</span>
+                <span>{n.source === "x" ? "X（Grok 搜索）" : n.source === "web" ? "全网" : n.source}</span>
+                {n.heat > 0 ? <span>热度 {n.heat}</span> : null}
                 <span>{new Date(n.fetched_at).toLocaleString("zh-CN")}</span>
                 {n.tags.map((t) => (
                   <a key={t} href={`/radar?tag=${encodeURIComponent(t)}`} className="rounded bg-zinc-100 px-1.5 dark:bg-zinc-800">

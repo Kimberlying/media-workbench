@@ -3,9 +3,13 @@ import { z } from "zod";
 import type { LlmGateway } from "@/lib/llm";
 import { addDays } from "@/lib/dates";
 import type { Step } from "@/lib/llm/models";
+import { FEEDS, httpFetchText, type FeedItem, type FetchText } from "@/lib/radar/feeds";
+import { classify, dedupe, URL_WINDOW_DAYS, type SeenItem } from "@/lib/radar/filters";
 
-// 资讯雷达：按所有账号档案关心的方向，让 Grok 实时搜 X 上过去 24 小时的热点，入共享池。
-// 只用 X 一路（kim 2026-10-13 决定不要全网动态）。
+// 资讯雷达，两路来源入同一个共享池：
+// 1. Grok 按所有账号档案关心的方向，实时搜 X 上过去 24 小时的热点（kim 2026-10-13 决定不要 Gemini 全网动态）
+// 2. 固定信源（Product Hunt、HN、GitHub Trending 等，见 src/lib/radar/feeds.ts），不经过模型
+// 入库前统一去重，并打上「利他」「清醒」分类标签。
 // 对标账号视频转录（VideoScript）不在一期骨架里，接入后在这里加一个来源即可。
 
 const NewsBatch = z.object({
@@ -75,16 +79,42 @@ export async function fetchNews(
   return batch.items;
 }
 
-export async function saveNews(
-  db: SupabaseClient,
-  source: string,
-  items: NewsBatch["items"],
-): Promise<number> {
+export type RadarItem = FeedItem & { tags?: string[] };
+
+/** 抓全部固定信源；单个信源失败不影响其他 */
+export async function fetchFeeds(fetchText: FetchText = httpFetchText): Promise<FeedItem[]> {
+  const results = await Promise.allSettled(FEEDS.map((feed) => feed.fetch(fetchText)));
+  return results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+}
+
+/** Grok 搜到的条目没有热度分，记 0 */
+export function fromGrok(source: string, items: NewsBatch["items"]): RadarItem[] {
+  return items.map((i) => ({ source, heat: 0, ...i }));
+}
+
+export async function saveNews(db: SupabaseClient, items: RadarItem[], now = new Date()): Promise<number> {
   if (items.length === 0) return 0;
+  const since = new Date(now.getTime() - URL_WINDOW_DAYS * 86400_000).toISOString();
+  const { data: seen, error: seenError } = await db
+    .from("news_items")
+    .select("title, url, summary, fetched_at")
+    .gte("fetched_at", since);
+  if (seenError) throw new Error(seenError.message);
+
+  const fresh = dedupe(items, (seen ?? []) as SeenItem[], now) as RadarItem[];
+  if (fresh.length === 0) return 0;
+
   const { data, error } = await db
     .from("news_items")
     .upsert(
-      items.map((i) => ({ source, ...i })),
+      fresh.map((i) => ({
+        source: i.source,
+        title: i.title,
+        url: i.url,
+        summary: i.summary,
+        heat: i.heat,
+        tags: [...new Set([...classify(i), ...(i.tags ?? [])])],
+      })),
       { onConflict: "url", ignoreDuplicates: true },
     )
     .select("id");

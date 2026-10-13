@@ -299,6 +299,7 @@ async function writeXPost(
   material: string,
   model: string | undefined,
   contentId?: string,
+  newsId?: string,
 ) {
   const { user } = await requireSession();
   const { supabase, account, profile } = await loadXAccount(accountId);
@@ -309,6 +310,7 @@ async function writeXPost(
     mode,
     material,
     model,
+    newsId,
   });
   const knowledge = await loadKnowledge(supabase, account.workspace_id);
   const compliance = checkTabooWords(body, [...(profile?.taboo ?? []), ...knowledge.tabooWords]);
@@ -355,7 +357,7 @@ export async function regenerateXPost(contentId: string) {
   if (data.status !== "draft" || pack?.kind !== "post" || pack.mode === "topic" || !pack.source) {
     throw new Error("只有素材改写出来的草稿可以重出");
   }
-  await writeXPost(data.account_id, pack.mode, pack.source, pack.model, contentId);
+  await writeXPost(data.account_id, pack.mode, pack.source, pack.model, contentId, pack.newsId);
 }
 
 // ---------------------------------------------------------------------------

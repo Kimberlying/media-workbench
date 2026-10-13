@@ -3,8 +3,11 @@ import type { Account, AccountProfile, Org, Topic } from "@/lib/db/types";
 import { getGateway } from "@/lib/llm";
 import { generateContents } from "@/lib/pipeline/copywriting";
 import { dueContents, publishContent, syncMetrics } from "@/lib/pipeline/publish";
-import { collectInterests, fetchNews, RADAR_SOURCES, saveNews } from "@/lib/pipeline/radar";
+import { collectInterests, fetchFeeds, fetchNews, fromGrok, RADAR_SOURCES, saveNews } from "@/lib/pipeline/radar";
+import { loadDigest, writeDailyPosts } from "@/lib/pipeline/daily";
 import { planTopicsForAccount } from "@/lib/pipeline/topics";
+import { discordMessages, sendDiscord } from "@/lib/notify/discord";
+import { digestDay } from "@/lib/radar/daily";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { EVENTS, inngest } from "./client";
 
@@ -15,15 +18,29 @@ export const radarDaily = inngest.createFunction(
   { id: "radar-daily", triggers: [{ cron: "TZ=Asia/Shanghai 0 7 * * *" }] },
   async ({ step }) => {
     const db = createAdminClient();
-    const interests = await step.run("collect-interests", () => collectInterests(db));
-    if (interests.length === 0) return { saved: 0, reason: "还没有账号档案" };
+    // 当天日期在第一步定下来，重试时不会跨日
+    const day = await step.run("day", () => digestDay());
 
-    let saved = 0;
-    for (const source of RADAR_SOURCES) {
+    // 固定信源不依赖账号档案，先入库；热度高的优先占位，Grok 搜到的同一件事会被去重挡掉
+    const feedItems = await step.run("fetch-feeds", () => fetchFeeds());
+    let saved = await step.run("save-feeds", () => saveNews(db, feedItems));
+
+    const interests = await step.run("collect-interests", () => collectInterests(db));
+    for (const source of interests.length > 0 ? RADAR_SOURCES : []) {
       const items = await step.run(`fetch-${source.source}`, () =>
         fetchNews(getGateway(), interests, source),
       );
-      saved += await step.run(`save-${source.source}`, () => saveNews(db, source.source, items));
+      saved += await step.run(`save-${source.source}`, () => saveNews(db, fromGrok(source.source, items)));
+    }
+
+    // 今日 3 条短推草稿，再把热度前 5 和这 3 条推到 Discord
+    const posts = await step.run("daily-posts", () => writeDailyPosts(db, getGateway(), day));
+    const webhook = process.env.DISCORD_WEBHOOK_URL;
+    if (webhook) {
+      await step.run("push-discord", async () => {
+        const { digest, posts } = await loadDigest(db, day);
+        return sendDiscord(webhook, discordMessages(digest, posts));
+      });
     }
 
     // 资讯入库后，给每个有档案的账号出候选选题
@@ -38,7 +55,7 @@ export const radarDaily = inngest.createFunction(
         accountIds.map((accountId) => ({ name: EVENTS.topicsRequested, data: { accountId } })),
       );
     }
-    return { saved, accounts: accountIds.length };
+    return { day, saved, posts, accounts: accountIds.length };
   },
 );
 
