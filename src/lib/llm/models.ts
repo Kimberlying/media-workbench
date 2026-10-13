@@ -8,6 +8,8 @@ export const STEPS = [
   "topics.plan", // 选题策划
   "copy.post", // 多平台文案
   "copy.x_thread", // X 推文串
+  "copy.longform", // X 长文、公众号长文
+  "copy.xhs_pack", // 小红书内容包、公众号贴图
   "review.summary", // 数据复盘总结
 ] as const;
 
@@ -20,6 +22,8 @@ const DEFAULT_MODELS: Record<Step, string> = {
   "topics.plan": "gemini-flash",
   "copy.post": "gemini-flash",
   "copy.x_thread": "grok",
+  "copy.longform": "gemini-flash",
+  "copy.xhs_pack": "gemini-flash",
   "review.summary": "gemini-flash",
 };
 

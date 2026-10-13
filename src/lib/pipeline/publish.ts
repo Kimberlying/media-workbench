@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getConnector } from "@/lib/connectors";
+import { getConnector, publishesViaApi } from "@/lib/connectors";
 import type { Account, Content, MetricSnapshot } from "@/lib/db/types";
 import { loadAccessToken } from "@/lib/secrets";
 
@@ -15,7 +15,7 @@ export async function dueContents(db: SupabaseClient, now = new Date()) {
     .limit(50);
   if (error) throw new Error(error.message);
   return (data ?? []).filter(
-    (row: Content & { account: Account }) => getConnector(row.account.platform).supportsApiPublish,
+    (row: Content & { account: Account }) => publishesViaApi(row.account.platform, row.variant),
   ) as (Content & { account: Account })[];
 }
 

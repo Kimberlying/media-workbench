@@ -10,16 +10,31 @@
 | --- | --- | --- |
 | 资讯雷达 | 每天 7 点（北京时间）按账号档案抓 X 热点和全网动态，入共享资讯池 | `src/lib/pipeline/radar.ts` |
 | 选题策划 | 按账号档案从资讯池筛选题，带热度与相关性评分；可排进周日历 | `src/lib/pipeline/topics.ts` |
-| 文案生成 | 一个选题按所选账号一次出多平台版本，套档案语气和知识库 | `src/lib/pipeline/copywriting.ts` |
+| 文案生成 | 一个选题按所选账号和形式一次出多个版本，套档案语气和知识库 | `src/lib/pipeline/copywriting.ts`、`src/lib/content/formats.ts` |
+| 长文 | X 长文；公众号长文由同一篇 X 长文改写，并配 3–6 张横版贴图 | `src/lib/xhs/prompts.ts` |
+| 小红书内容包 | brief → 8–12 张知识卡 → 标题、正文、标签、检查，结构沿用 [build-xhs-content-pack](https://github.com/Kimberlying/build-xhs-content-pack) | `src/lib/xhs/` |
 | 知识库（简版） | 语气指南、禁用词、历史爆款等，生成时自动带上 | `src/app/(app)/knowledge` |
 | 合规（一期） | 禁用词检查，命中则留在草稿并标出命中词 | `src/lib/content/compliance.ts` |
-| 发布排期 | X 走 API 定时发（支持推文串）；其他平台生成发布包，人工发后登记 | `src/lib/connectors/` |
+| 发布排期 | X 推文串走 API 定时发；X 长文、公众号、小红书等生成发布包（zip），人工发后登记 | `src/lib/connectors/`、`src/app/api/contents/[id]/pack` |
 | 数据复盘 | 每天 3 点拉 X 帖子数据，按 7 / 30 天汇总 | `src/lib/pipeline/publish.ts`、`src/app/(app)/analytics` |
 | 多租户与计量 | Supabase RLS 按组织隔离；`usage_logs` 记录每次生成的模型、token、费用 | `supabase/migrations/`、`src/lib/llm/` |
 
 内容状态：草稿 → 合规检查 → 待审批 → 已批准 → 已排期 → 已发布，任一审批环节可退回草稿。自用组织默认关闭审批（`orgs.settings.approval_required = false`），合规通过直接到已批准。
 
 不在一期：视觉生成、视频剪辑、多级审批台、IG / FB / LinkedIn 的 API 接入、互动回复、订阅计费，以及资讯雷达里的对标账号视频转录。
+
+## 发布包和出图
+
+长文和小红书内容在「内容」页可以下载发布包。小红书包的目录和 `cards/cards.json` 与 build-xhs-content-pack 一致，用它的脚本出图：
+
+```bash
+git clone https://github.com/Kimberlying/build-xhs-content-pack
+cd build-xhs-content-pack/skills/build-xhs-content-pack
+python3 -m pip install -r scripts/requirements.txt
+python3 scripts/render_cards.py <发布包>/cards/cards.json --output-dir <发布包>/images
+```
+
+公众号包里的 `cards.json` 是 1200×675 横版贴图，用同一个命令出图。工作台里出图放在二期（视觉生成）。
 
 ## 技术栈
 

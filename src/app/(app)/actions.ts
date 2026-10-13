@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { checkTabooWords } from "@/lib/content/compliance";
+import { getFormat } from "@/lib/content/formats";
 import { assertTransition } from "@/lib/content/status";
 import type { ContentStatus, KnowledgeType, Platform } from "@/lib/db/types";
 import { weekStart } from "@/lib/dates";
@@ -24,7 +25,7 @@ function list(raw: FormDataEntryValue | null): string[] {
 // 账号与档案
 // ---------------------------------------------------------------------------
 
-const PLATFORMS: Platform[] = ["x", "instagram", "facebook", "linkedin", "xiaohongshu"];
+const PLATFORMS: Platform[] = ["x", "instagram", "facebook", "linkedin", "xiaohongshu", "wechat"];
 
 export async function addManualAccount(formData: FormData) {
   const { supabase, org, workspace } = await requireSession();
@@ -138,12 +139,19 @@ export async function discardTopic(topicId: string) {
 
 export async function requestContents(topicId: string, formData: FormData) {
   const { supabase } = await requireSession();
-  const accountIds = formData.getAll("accountIds").map(String);
-  if (accountIds.length === 0) return;
+  // 每个勾选项是「账号 id|内容形式」，例如 uuid|x.article
+  const targets = formData
+    .getAll("targets")
+    .map(String)
+    .map((v) => {
+      const [accountId, format] = v.split("|");
+      return { accountId, format: getFormat(format).id };
+    });
+  if (targets.length === 0) return;
   // 确认选题属于当前用户可见的组织
   const { data: topic } = await supabase.from("topics").select("id").eq("id", topicId).single();
   if (!topic) throw new Error("找不到选题");
-  await inngest.send({ name: EVENTS.contentsRequested, data: { topicId, accountIds } });
+  await inngest.send({ name: EVENTS.contentsRequested, data: { topicId, targets } });
   await supabase.from("topics").update({ status: "selected" }).eq("id", topicId);
   revalidatePath("/topics");
 }

@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { Card, Empty, PageHeader, buttonClass, ghostButtonClass, inputClass } from "@/components/ui";
 import { TzOffsetInput } from "@/components/tz-offset-input";
-import { getConnector } from "@/lib/connectors";
+import { PackSummary } from "@/components/pack-summary";
+import { publishesViaApi } from "@/lib/connectors";
+import { formatOfVariant } from "@/lib/content/formats";
 import { STATUS_LABELS } from "@/lib/content/status";
 import type { Account, Content, ContentStatus } from "@/lib/db/types";
 import { requireSession } from "@/lib/session";
@@ -46,14 +48,15 @@ export default async function ContentsPage({ searchParams }: PageProps<"/content
       ) : (
         <div className="grid gap-3">
           {contents.map((c) => {
-            const viaApi = getConnector(c.account.platform).supportsApiPublish;
+            const viaApi = publishesViaApi(c.account.platform, c.variant);
+            const format = formatOfVariant(c.variant);
             return (
               <Card key={c.id}>
                 <div className="mb-2 flex flex-wrap gap-2 text-xs text-zinc-500">
                   <span>
                     {c.account.platform} @{c.account.handle}
                   </span>
-                  <span>{c.variant}</span>
+                  <span>{format.label}</span>
                   {c.scheduled_at ? <span>定时 {new Date(c.scheduled_at).toLocaleString("zh-CN")}</span> : null}
                   {!viaApi ? <span>发布包 · 人工发</span> : null}
                 </div>
@@ -63,7 +66,12 @@ export default async function ContentsPage({ searchParams }: PageProps<"/content
 
                 {status === "draft" ? (
                   <form action={saveContentBody.bind(null, c.id)} className="grid gap-2">
-                    <textarea name="body" defaultValue={c.body} rows={8} className={inputClass} />
+                    <textarea
+                      name="body"
+                      defaultValue={c.body}
+                      rows={format.kind === "longform" ? 20 : 8}
+                      className={inputClass}
+                    />
                     <div className="flex gap-2">
                       <button className={ghostButtonClass}>保存</button>
                       <button formAction={submitContent.bind(null, c.id)} className={buttonClass}>
@@ -72,8 +80,15 @@ export default async function ContentsPage({ searchParams }: PageProps<"/content
                     </div>
                   </form>
                 ) : (
-                  <pre className="whitespace-pre-wrap font-sans text-sm">{c.body}</pre>
+                  <details open={format.kind !== "longform"}>
+                    <summary className="cursor-pointer text-sm text-zinc-500">
+                      {c.pack?.kind === "longform" ? c.pack.title : "正文"}
+                    </summary>
+                    <pre className="mt-2 whitespace-pre-wrap font-sans text-sm">{c.body}</pre>
+                  </details>
                 )}
+
+                {c.pack ? <PackSummary contentId={c.id} pack={c.pack} /> : null}
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   {status === "pending_approval" ? (

@@ -9,6 +9,7 @@ const PLATFORM_LABELS = {
   facebook: "Facebook",
   linkedin: "LinkedIn",
   xiaohongshu: "小红书",
+  wechat: "公众号",
 } as const;
 
 export default async function AccountsPage({ searchParams }: PageProps<"/accounts">) {
@@ -38,7 +39,11 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
                 {PLATFORM_LABELS[a.platform]} @{a.handle}
               </span>
               <span className="text-xs text-zinc-500">
-                {a.platform === "x" ? (a.token_ref ? "已授权，可自动发布" : "未授权") : "发布包 · 人工发"}
+                {a.platform === "x"
+                  ? a.token_ref
+                    ? "已授权，推文串可自动发布；长文出发布包"
+                    : "未授权"
+                  : "发布包 · 人工发"}
               </span>
             </div>
             <form action={saveProfile.bind(null, a.id)} className="grid gap-3 md:grid-cols-2">

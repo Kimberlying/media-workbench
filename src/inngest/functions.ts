@@ -1,3 +1,4 @@
+import { getFormat } from "@/lib/content/formats";
 import type { Account, AccountProfile, Org, Topic } from "@/lib/db/types";
 import { getGateway } from "@/lib/llm";
 import { generateContents } from "@/lib/pipeline/copywriting";
@@ -68,7 +69,11 @@ export const generateContentsFn = inngest.createFunction(
   { id: "generate-contents", triggers: [{ event: EVENTS.contentsRequested }] },
   async ({ event, step }) => {
     const db = createAdminClient();
-    const { topicId, accountIds } = event.data as { topicId: string; accountIds: string[] };
+    const { topicId, targets: requested } = event.data as {
+      topicId: string;
+      targets: { accountId: string; format: string }[];
+    };
+    const accountIds = [...new Set(requested.map((t) => t.accountId))];
 
     const ctx = await step.run("load", async () => {
       const { data: topic, error } = await db.from("topics").select("*").eq("id", topicId).single();
@@ -85,12 +90,13 @@ export const generateContentsFn = inngest.createFunction(
         .in("id", accountIds)
         .eq("org_id", topic.org_id);
       if (accError) throw new Error(accError.message);
-      const targets = (accounts ?? [])
-        .filter((a) => a.profile)
-        .map(({ profile, ...account }) => ({
-          account: account as Account,
-          profile: profile as AccountProfile,
-        }));
+      const byId = new Map((accounts ?? []).filter((a) => a.profile).map((a) => [a.id as string, a]));
+      const targets = requested.flatMap(({ accountId, format }) => {
+        const row = byId.get(accountId);
+        if (!row) return [];
+        const { profile, ...account } = row;
+        return [{ account: account as Account, profile: profile as AccountProfile, formatId: format }];
+      });
       return { topic: topic as Topic, org: org as Org, targets };
     });
 
@@ -99,7 +105,7 @@ export const generateContentsFn = inngest.createFunction(
         db,
         getGateway(),
         ctx.topic,
-        ctx.targets,
+        ctx.targets.map(({ formatId, ...t }) => ({ ...t, format: getFormat(formatId) })),
         ctx.org.settings?.approval_required ?? false,
       ),
     );
