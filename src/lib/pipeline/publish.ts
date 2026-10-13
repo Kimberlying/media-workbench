@@ -1,0 +1,92 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { getConnector } from "@/lib/connectors";
+import type { Account, Content, MetricSnapshot } from "@/lib/db/types";
+import { loadAccessToken } from "@/lib/secrets";
+
+// 发布与取数都在后台任务里用 service role 跑；令牌只在服务端解密。
+
+/** 找出到点且平台支持 API 发布的已排期内容 */
+export async function dueContents(db: SupabaseClient, now = new Date()) {
+  const { data, error } = await db
+    .from("contents")
+    .select("*, account:accounts(*)")
+    .eq("status", "scheduled")
+    .lte("scheduled_at", now.toISOString())
+    .limit(50);
+  if (error) throw new Error(error.message);
+  return (data ?? []).filter(
+    (row: Content & { account: Account }) => getConnector(row.account.platform).supportsApiPublish,
+  ) as (Content & { account: Account })[];
+}
+
+export async function publishContent(
+  db: SupabaseClient,
+  content: Content & { account: Account },
+): Promise<string> {
+  const connector = getConnector(content.account.platform);
+  const accessToken = await loadAccessToken(db, content.account);
+  const result = await connector.publish({ body: content.body }, { accessToken });
+  if (result.method !== "api") {
+    throw new Error(`${content.account.platform} 没有 API 发布，应走发布包`);
+  }
+
+  const { error: postError } = await db.from("posts").insert({
+    org_id: content.org_id,
+    content_id: content.id,
+    platform_post_id: result.platformPostId,
+    method: "api",
+  });
+  if (postError) throw new Error(postError.message);
+
+  const { error } = await db
+    .from("contents")
+    .update({ status: "published" })
+    .eq("id", content.id)
+    .eq("status", "scheduled");
+  if (error) throw new Error(error.message);
+  return result.platformPostId;
+}
+
+/** 拉取近 N 天 API 发布的帖子数据，按天写快照 */
+export async function syncMetrics(db: SupabaseClient, { days = 30, now = new Date() } = {}) {
+  const since = new Date(now.getTime() - days * 86400_000).toISOString();
+  const { data, error } = await db
+    .from("posts")
+    .select("id, org_id, platform_post_id, content:contents(account:accounts(*))")
+    .eq("method", "api")
+    .gte("published_at", since)
+    .not("platform_post_id", "is", null);
+  if (error) throw new Error(error.message);
+
+  type Row = {
+    id: string;
+    org_id: string;
+    platform_post_id: string;
+    content: { account: Account };
+  };
+  const byAccount = new Map<string, { account: Account; posts: Row[] }>();
+  for (const row of (data ?? []) as unknown as Row[]) {
+    const account = row.content.account;
+    const entry = byAccount.get(account.id) ?? { account, posts: [] };
+    entry.posts.push(row);
+    byAccount.set(account.id, entry);
+  }
+
+  const date = now.toISOString().slice(0, 10);
+  let written = 0;
+  for (const { account, posts } of byAccount.values()) {
+    const accessToken = await loadAccessToken(db, account);
+    const metrics: Map<string, MetricSnapshot> = await getConnector(account.platform).fetchMetrics(
+      posts.map((p) => p.platform_post_id),
+      { accessToken },
+    );
+    const rows = posts
+      .filter((p) => metrics.has(p.platform_post_id))
+      .map((p) => ({ post_id: p.id, org_id: p.org_id, date, ...metrics.get(p.platform_post_id)! }));
+    if (rows.length === 0) continue;
+    const { error: upsertError } = await db.from("metrics").upsert(rows, { onConflict: "post_id,date" });
+    if (upsertError) throw new Error(upsertError.message);
+    written += rows.length;
+  }
+  return written;
+}

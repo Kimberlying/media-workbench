@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 自媒体工作台
 
-## Getting Started
+从选题到复盘的一站式内容工作台：资讯进来，内容出去，数据回流。AI 负责效率，人负责品质。
 
-First, run the development server:
+这是一期（自用 MVP）的代码骨架，按[项目设计文档](https://claude.ai/code/artifact/78f5629d-d472-4fad-99a7-3faafcbd03d9)搭建。一期只服务自己的账号，但多租户和计量从第一天就打好底：组织 → 工作区 → 账号，所有业务表按组织做行级隔离，每次模型调用都记用量。
+
+## 一期包含什么
+
+| 模块 | 做什么 | 代码 |
+| --- | --- | --- |
+| 资讯雷达 | 每天 7 点（北京时间）按账号档案抓 X 热点和全网动态，入共享资讯池 | `src/lib/pipeline/radar.ts` |
+| 选题策划 | 按账号档案从资讯池筛选题，带热度与相关性评分；可排进周日历 | `src/lib/pipeline/topics.ts` |
+| 文案生成 | 一个选题按所选账号一次出多平台版本，套档案语气和知识库 | `src/lib/pipeline/copywriting.ts` |
+| 知识库（简版） | 语气指南、禁用词、历史爆款等，生成时自动带上 | `src/app/(app)/knowledge` |
+| 合规（一期） | 禁用词检查，命中则留在草稿并标出命中词 | `src/lib/content/compliance.ts` |
+| 发布排期 | X 走 API 定时发（支持推文串）；其他平台生成发布包，人工发后登记 | `src/lib/connectors/` |
+| 数据复盘 | 每天 3 点拉 X 帖子数据，按 7 / 30 天汇总 | `src/lib/pipeline/publish.ts`、`src/app/(app)/analytics` |
+| 多租户与计量 | Supabase RLS 按组织隔离；`usage_logs` 记录每次生成的模型、token、费用 | `supabase/migrations/`、`src/lib/llm/` |
+
+内容状态：草稿 → 合规检查 → 待审批 → 已批准 → 已排期 → 已发布，任一审批环节可退回草稿。自用组织默认关闭审批（`orgs.settings.approval_required = false`），合规通过直接到已批准。
+
+不在一期：视觉生成、视频剪辑、多级审批台、IG / FB / LinkedIn 的 API 接入、互动回复、订阅计费，以及资讯雷达里的对标账号视频转录。
+
+## 技术栈
+
+- **Next.js 16**（App Router、Server Actions）：页面和接口一套代码
+- **Supabase**：Postgres、邮箱登录、行级安全
+- **Inngest**：定时抓资讯、批量生成、定时发布、拉数据，可重试、看日志
+- **LiteLLM 代理**：业务代码只用模型别名（`grok`、`gemini-flash`、`gemini-search`），每个环节用哪个模型在 `src/lib/llm/models.ts` 和 `litellm/config.yaml` 里配
+- 平台令牌 AES-256-GCM 加密存在 `account_secrets`，这张表不开放任何 RLS 策略，只有后台任务能读
+
+流水线按固定顺序跑，大模型只负责每一步里的生成，不让 Agent 自由调度。
+
+## 本地跑起来
+
+1. 安装依赖：`npm install`
+2. 复制环境变量：`cp .env.example .env.local`，按注释填好
+3. 建 Supabase 项目，执行 `supabase/migrations/` 下的 SQL（Supabase CLI：`supabase link` 后 `supabase db push`；或直接粘到 SQL Editor）。Authentication → URL Configuration 里把 `{APP_URL}/auth/callback` 加进 Redirect URLs
+4. 启动模型网关：见 `litellm/config.yaml` 顶部的命令
+5. 启动 Inngest 本地开发服务：`npx inngest-cli@latest dev -u http://localhost:3000/api/inngest`
+6. 启动应用：`npm run dev`，打开 http://localhost:3000 用邮箱登录。首次登录自动创建你的自用组织和工作区
+
+然后：在「账号与档案」连接 X 账号（X 开发者后台的回调地址填 `{APP_URL}/api/connect/x/callback`，权限选 Read and write），填好账号档案；资讯雷达第二天早上开始自动跑，也可以在「选题」里手动出一批。
+
+## 常用命令
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run dev        # 开发
+npm test           # 单元测试
+npm run typecheck  # 类型检查
+npm run lint
+npm run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 加一个账号、加一个平台
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- 加一个 X 小号：在「账号与档案」再连接一个 X 账号并填一份档案，不改代码
+- 加一个平台：在 `src/lib/connectors/` 实现 `PlatformConnector`（`publish` 和 `fetchMetrics`），在 `index.ts` 注册，主流程不动
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 上线前要核实
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- X API 的套餐、发帖和读数据的额度与价格
+- `litellm/config.yaml` 里的模型 ID，以及 Grok 搜 X 的参数（`src/lib/llm/models.ts` 的 `STEP_PARAMS`）
