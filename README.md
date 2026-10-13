@@ -8,7 +8,7 @@
 
 | 模块 | 做什么 | 代码 |
 | --- | --- | --- |
-| 资讯雷达 | 每天 7 点（北京时间）让 Grok 按账号档案实时搜 X 上过去 24 小时的热点（xAI 的 `x_search` 工具），入共享资讯池 | `src/lib/pipeline/radar.ts` |
+| 资讯雷达 | 每天 7 点（北京时间）两路入共享资讯池：8 个固定信源（Product Hunt、r/SideProject、Hacker News、r/LocalLLaMA、GitHub Trending、NodeSeek、阮一峰周刊、Godly，搬自 kim 原来的 `fetch_ai_radar.py`），加 Grok 按账号档案实时搜 X（`x_search`）。入库前去重（14 天同链接、3 天同标题或核心词），并打「利他」「清醒」标签 | `src/lib/radar/`、`src/lib/pipeline/radar.ts` |
 | 选题策划 | 按账号档案从资讯池筛选题，带热度与相关性评分；可排进周日历 | `src/lib/pipeline/topics.ts` |
 | 文案生成 | 一个选题按所选账号和形式一次出多个版本，套档案语气和知识库 | `src/lib/pipeline/copywriting.ts`、`src/lib/content/formats.ts` |
 | X 短推 | 从选题生成，或把一段素材「润色」「翻译」成一条短推；不超过 250 字、无 emoji、不以问号结尾、不加互动引导，可选模型、可重出。规则沿用 [tweet-buffer-workflow](https://github.com/Kimberlying/tweet-buffer-workflow) | `src/lib/content/x-post.ts`、`src/app/(app)/contents/rewrite-form.tsx` |

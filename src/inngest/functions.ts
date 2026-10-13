@@ -3,7 +3,7 @@ import type { Account, AccountProfile, Org, Topic } from "@/lib/db/types";
 import { getGateway } from "@/lib/llm";
 import { generateContents } from "@/lib/pipeline/copywriting";
 import { dueContents, publishContent, syncMetrics } from "@/lib/pipeline/publish";
-import { collectInterests, fetchNews, RADAR_SOURCES, saveNews } from "@/lib/pipeline/radar";
+import { collectInterests, fetchFeeds, fetchNews, fromGrok, RADAR_SOURCES, saveNews } from "@/lib/pipeline/radar";
 import { planTopicsForAccount } from "@/lib/pipeline/topics";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { EVENTS, inngest } from "./client";
@@ -18,12 +18,15 @@ export const radarDaily = inngest.createFunction(
     const interests = await step.run("collect-interests", () => collectInterests(db));
     if (interests.length === 0) return { saved: 0, reason: "还没有账号档案" };
 
-    let saved = 0;
+    // 固定信源先入库，热度高的优先占位；Grok 搜到的同一件事会被去重挡掉
+    const feedItems = await step.run("fetch-feeds", () => fetchFeeds());
+    let saved = await step.run("save-feeds", () => saveNews(db, feedItems));
+
     for (const source of RADAR_SOURCES) {
       const items = await step.run(`fetch-${source.source}`, () =>
         fetchNews(getGateway(), interests, source),
       );
-      saved += await step.run(`save-${source.source}`, () => saveNews(db, source.source, items));
+      saved += await step.run(`save-${source.source}`, () => saveNews(db, fromGrok(source.source, items)));
     }
 
     // 资讯入库后，给每个有档案的账号出候选选题

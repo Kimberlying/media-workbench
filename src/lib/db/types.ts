@@ -71,6 +71,7 @@ export interface NewsItem {
   title: string;
   summary: string;
   tags: string[];
+  heat: number;
   fetched_at: string;
 }
 
