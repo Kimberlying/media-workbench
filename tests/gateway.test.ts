@@ -99,6 +99,32 @@ describe("模型网关", () => {
     expect(records[0]).toMatchObject({ step: "radar.x", model: "grok", input_tokens: 50, output_tokens: 10 });
   });
 
+  it("配了 xAI 时，带工具的请求直连 xAI；普通请求仍走网关", async () => {
+    const records: UsageRecord[] = [];
+    const fetch = vi.fn(async (url: string) =>
+      url.includes("x.ai")
+        ? new Response(JSON.stringify({ output: [{ type: "message", content: [{ type: "output_text", text: "ok" }] }] }))
+        : new Response(JSON.stringify({ choices: [{ message: { content: "gw" } }] })),
+    );
+    const gw = new LlmGateway({
+      baseUrl: "http://gw",
+      apiKey: "gw-key",
+      fetch: fetch as unknown as typeof globalThis.fetch,
+      usage: { record: async (u) => void records.push(u) },
+      xai: { apiKey: "xai-key", model: "grok-4.7" },
+    });
+
+    expect(await gw.generate({ orgId: null, step: "radar.x", messages: [], tools: [{ type: "x_search" }] })).toBe("ok");
+    expect(await gw.generate({ orgId: null, step: "copy.post", messages: [] })).toBe("gw");
+
+    const calls = fetch.mock.calls as unknown as [string, RequestInit][];
+    expect(calls[0][0]).toBe("https://api.x.ai/v1/responses");
+    expect((calls[0][1].headers as Record<string, string>).authorization).toBe("Bearer xai-key");
+    expect(JSON.parse(String(calls[0][1].body)).model).toBe("grok-4.7");
+    expect(calls[1][0]).toBe("http://gw/v1/chat/completions");
+    expect(records.map((r) => r.model)).toEqual(["grok-4.7", "gemini-flash"]);
+  });
+
   it("环境变量可以覆盖某个环节的模型", () => {
     expect(modelFor("copy.post", '{"copy.post":"gemini-pro"}')).toBe("gemini-pro");
     expect(modelFor("copy.post", "不是 JSON")).toBe("gemini-flash");

@@ -3,7 +3,8 @@ import { modelFor, type Step } from "./models";
 
 // 模型网关：所有生成都经过这里。
 // - 调用 OpenAI 兼容接口（LiteLLM 代理），模型由 step 决定
-// - 带服务端工具（如 Grok 的 x_search）时走 Responses 接口，xAI 只在这个接口上提供搜索工具
+// - 带服务端工具（如 Grok 的 x_search）时走 Responses 接口，xAI 只在这个接口上提供搜索工具；
+//   配了 xAI 的 key 就直连 xAI（kim 2026-10-14 决定用 xAI 的 Grok API 搜 X 热点）
 // - 每次调用写一条 usage_logs：哪个租户、哪个环节、哪个模型、多少 token、多少钱
 
 export interface ChatMessage {
@@ -42,6 +43,8 @@ export interface GatewayConfig {
   apiKey: string;
   usage: UsageSink;
   fetch?: typeof fetch;
+  /** 带工具的请求（Grok 搜 X）直连 xAI，不经过 LiteLLM；没配就仍走网关 */
+  xai?: { apiKey: string; model: string; baseUrl?: string };
 }
 
 interface ChatCompletionResponse {
@@ -62,16 +65,17 @@ export class LlmGateway {
   async generate<T>(
     opts: GenerateOptions & { json?: false | z.ZodType<T> },
   ): Promise<string | T> {
-    const model = opts.model ?? modelFor(opts.step);
     const doFetch = this.config.fetch ?? fetch;
-    const base = this.config.baseUrl.replace(/\/$/, "");
     const useResponses = Boolean(opts.tools?.length);
+    const direct = useResponses ? this.config.xai : undefined;
+    const model = direct ? direct.model : (opts.model ?? modelFor(opts.step));
+    const base = (direct ? (direct.baseUrl ?? "https://api.x.ai") : this.config.baseUrl).replace(/\/$/, "");
 
     const res = await doFetch(`${base}/v1/${useResponses ? "responses" : "chat/completions"}`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${this.config.apiKey}`,
+        authorization: `Bearer ${direct ? direct.apiKey : this.config.apiKey}`,
       },
       body: JSON.stringify(
         useResponses

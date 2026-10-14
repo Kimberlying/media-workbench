@@ -77,4 +77,4 @@ npm run build
 ## 上线前要核实
 
 - X API 的套餐、发帖和读数据的额度与价格
-- `litellm/config.yaml` 里的模型 ID，以及 LiteLLM 能否把带 `x_search` 工具的 Responses 请求（`/v1/responses`）转给 xAI；不行的话资讯雷达直连 xAI
+- `litellm/config.yaml` 里的模型 ID，以及 `XAI_MODEL`（资讯雷达直连 xAI 搜 X 用的模型，默认 `grok-4.7`）
