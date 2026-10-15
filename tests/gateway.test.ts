@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { LlmGateway, type UsageRecord } from "@/lib/llm/gateway";
-import { modelFor } from "@/lib/llm/models";
+import { costOf, modelFor } from "@/lib/llm/models";
+import { directProviders } from "@/lib/llm/providers";
 
 function fakeFetch(content: string, cost = "0.0012") {
   return vi.fn(async () =>
@@ -123,6 +124,36 @@ describe("模型网关", () => {
     expect(JSON.parse(String(calls[0][1].body)).model).toBe("grok-4.7");
     expect(calls[1][0]).toBe("http://gw/v1/chat/completions");
     expect(records.map((r) => r.model)).toEqual(["grok-4.7", "gemini-flash"]);
+  });
+
+  it("没配 LiteLLM 时按别名直连各家，并按单价算费用", async () => {
+    const records: UsageRecord[] = [];
+    const fetch = fakeFetch("直连", "");
+    const gw = new LlmGateway({
+      fetch,
+      usage: { record: async (u) => void records.push(u) },
+      providers: directProviders({ XAI_API_KEY: "xai-key", GEMINI_API_KEY: "g-key" }),
+    });
+
+    await gw.generate({ orgId: null, step: "copy.x_post", messages: [] });
+    await gw.generate({ orgId: null, step: "copy.post", messages: [] });
+
+    const calls = fetch.mock.calls as unknown as [string, RequestInit][];
+    expect(calls[0][0]).toBe("https://api.x.ai/v1/chat/completions");
+    expect((calls[0][1].headers as Record<string, string>).authorization).toBe("Bearer xai-key");
+    expect(calls[1][0]).toBe("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+    expect(JSON.parse(String(calls[1][1].body)).model).toBe("gemini-3.8-flash");
+    expect(records.map((r) => r.model)).toEqual(["grok-4.7", "gemini-3.8-flash"]);
+    expect(records[0].cost).toBeCloseTo((100 * 2 + 40 * 6) / 1_000_000);
+  });
+
+  it("别名既没有直连 key 也没有 LiteLLM 时报错说清缺什么", async () => {
+    const gw = new LlmGateway({ usage: { record: async () => {} }, providers: directProviders({ XAI_API_KEY: "k" }) });
+    await expect(gw.generate({ orgId: null, step: "copy.post", messages: [] })).rejects.toThrow("gemini-flash");
+  });
+
+  it("没列单价的模型费用记 0", () => {
+    expect(costOf("grok", 1000, 1000)).toBe(0);
   });
 
   it("环境变量可以覆盖某个环节的模型", () => {
