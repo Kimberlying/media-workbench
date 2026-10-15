@@ -1,8 +1,10 @@
 // 与 supabase/migrations 对应的领域类型。表结构变更时同步修改。
 
+import type { ContentPack } from "@/lib/xhs/schema";
+
 export type MemberRole = "owner" | "editor" | "reviewer" | "client_viewer";
 
-export type Platform = "x" | "instagram" | "facebook" | "linkedin" | "xiaohongshu";
+export type Platform = "x" | "instagram" | "facebook" | "linkedin" | "xiaohongshu" | "wechat";
 
 export type TopicStatus = "candidate" | "selected" | "scheduled" | "used" | "discarded";
 
@@ -69,6 +71,7 @@ export interface NewsItem {
   title: string;
   summary: string;
   tags: string[];
+  heat: number;
   fetched_at: string;
 }
 
@@ -96,6 +99,8 @@ export interface Content {
   media_ids: string[];
   status: ContentStatus;
   compliance_hits: string[];
+  /** 长文和小红书内容包的结构化部分（卡片、标题、检查结果） */
+  pack: ContentPack | null;
   scheduled_at: string | null;
 }
 

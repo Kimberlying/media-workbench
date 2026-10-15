@@ -8,12 +8,16 @@
 
 | 模块 | 做什么 | 代码 |
 | --- | --- | --- |
-| 资讯雷达 | 每天 7 点（北京时间）按账号档案抓 X 热点和全网动态，入共享资讯池 | `src/lib/pipeline/radar.ts` |
+| 资讯雷达 | 每天 7 点（北京时间）两路入共享资讯池：8 个固定信源（Product Hunt、r/SideProject、Hacker News、r/LocalLLaMA、GitHub Trending、NodeSeek、阮一峰周刊、Godly，搬自 kim 原来的 `fetch_ai_radar.py`），加 Grok 按账号档案实时搜 X（`x_search`）。入库前去重（14 天同链接、3 天同标题或核心词），并打「利他」「清醒」标签 | `src/lib/radar/`、`src/lib/pipeline/radar.ts` |
+| 今日 3 条与日报 | 资讯入库后，按洞察、实用、产品三个方向各挑一条，给每个 X 账号写成短推草稿（只生成不发）；热度前 5 和这 3 条推到 Discord（`DISCORD_WEBHOOK_URL`）；`/api/digest` 出日报，Mac 上的 `scripts/obsidian_sync.py` 每天拉下来写进 Obsidian | `src/lib/pipeline/daily.ts`、`src/lib/notify/discord.ts`、`scripts/obsidian_sync.py` |
 | 选题策划 | 按账号档案从资讯池筛选题，带热度与相关性评分；可排进周日历 | `src/lib/pipeline/topics.ts` |
-| 文案生成 | 一个选题按所选账号一次出多平台版本，套档案语气和知识库 | `src/lib/pipeline/copywriting.ts` |
+| 文案生成 | 一个选题按所选账号和形式一次出多个版本，套档案语气和知识库 | `src/lib/pipeline/copywriting.ts`、`src/lib/content/formats.ts` |
+| X 短推 | 从选题生成，或把一段素材「润色」「翻译」成一条短推；不超过 250 字、无 emoji、不以问号结尾、不加互动引导，可选模型、可重出。规则沿用 [tweet-buffer-workflow](https://github.com/Kimberlying/tweet-buffer-workflow) | `src/lib/content/x-post.ts`、`src/app/(app)/contents/rewrite-form.tsx` |
+| 长文 | X 长文；公众号长文由同一篇 X 长文改写，并配 3–6 张横版贴图 | `src/lib/xhs/prompts.ts` |
+| 小红书内容包 | brief → 8–12 张知识卡 → 标题、正文、标签、检查，结构沿用 [build-xhs-content-pack](https://github.com/Kimberlying/build-xhs-content-pack) | `src/lib/xhs/` |
 | 知识库（简版） | 语气指南、禁用词、历史爆款等，生成时自动带上 | `src/app/(app)/knowledge` |
 | 合规（一期） | 禁用词检查，命中则留在草稿并标出命中词 | `src/lib/content/compliance.ts` |
-| 发布排期 | X 走 API 定时发（支持推文串）；其他平台生成发布包，人工发后登记 | `src/lib/connectors/` |
+| 发布排期 | X 短推和推文串走 API 定时发；发布结果不确定时不自动重发，在「内容」页人工核对后登记；X 长文、公众号、小红书等生成发布包（zip），人工发后登记 | `src/lib/connectors/`、`src/app/api/contents/[id]/pack` |
 | 数据复盘 | 每天 3 点拉 X 帖子数据，按 7 / 30 天汇总 | `src/lib/pipeline/publish.ts`、`src/app/(app)/analytics` |
 | 多租户与计量 | Supabase RLS 按组织隔离；`usage_logs` 记录每次生成的模型、token、费用 | `supabase/migrations/`、`src/lib/llm/` |
 
@@ -21,12 +25,25 @@
 
 不在一期：视觉生成、视频剪辑、多级审批台、IG / FB / LinkedIn 的 API 接入、互动回复、订阅计费，以及资讯雷达里的对标账号视频转录。
 
+## 发布包和出图
+
+长文和小红书内容在「内容」页可以下载发布包。小红书包的目录和 `cards/cards.json` 与 build-xhs-content-pack 一致，用它的脚本出图：
+
+```bash
+git clone https://github.com/Kimberlying/build-xhs-content-pack
+cd build-xhs-content-pack/skills/build-xhs-content-pack
+python3 -m pip install -r scripts/requirements.txt
+python3 scripts/render_cards.py <发布包>/cards/cards.json --output-dir <发布包>/images
+```
+
+公众号包里的 `cards.json` 是 1200×675 横版贴图，用同一个命令出图。工作台里出图放在二期（视觉生成）。
+
 ## 技术栈
 
 - **Next.js 16**（App Router、Server Actions）：页面和接口一套代码
 - **Supabase**：Postgres、邮箱登录、行级安全
 - **Inngest**：定时抓资讯、批量生成、定时发布、拉数据，可重试、看日志
-- **LiteLLM 代理**：业务代码只用模型别名（`grok`、`gemini-flash`、`gemini-search`），每个环节用哪个模型在 `src/lib/llm/models.ts` 和 `litellm/config.yaml` 里配
+- **LiteLLM 代理**：业务代码只用模型别名（`grok`、`gemini-flash`），每个环节用哪个模型在 `src/lib/llm/models.ts` 和 `litellm/config.yaml` 里配
 - 平台令牌 AES-256-GCM 加密存在 `account_secrets`，这张表不开放任何 RLS 策略，只有后台任务能读
 
 流水线按固定顺序跑，大模型只负责每一步里的生成，不让 Agent 自由调度。
@@ -60,4 +77,4 @@ npm run build
 ## 上线前要核实
 
 - X API 的套餐、发帖和读数据的额度与价格
-- `litellm/config.yaml` 里的模型 ID，以及 Grok 搜 X 的参数（`src/lib/llm/models.ts` 的 `STEP_PARAMS`）
+- `litellm/config.yaml` 里的模型 ID，以及 `XAI_MODEL`（资讯雷达直连 xAI 搜 X 用的模型，默认 `grok-4.7`）

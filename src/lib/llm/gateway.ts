@@ -1,8 +1,10 @@
 import type { z } from "zod";
-import { modelFor, STEP_PARAMS, type Step } from "./models";
+import { modelFor, type Step } from "./models";
 
 // 模型网关：所有生成都经过这里。
 // - 调用 OpenAI 兼容接口（LiteLLM 代理），模型由 step 决定
+// - 带服务端工具（如 Grok 的 x_search）时走 Responses 接口，xAI 只在这个接口上提供搜索工具；
+//   配了 xAI 的 key 就直连 xAI（kim 2026-10-14 决定用 xAI 的 Grok API 搜 X 热点）
 // - 每次调用写一条 usage_logs：哪个租户、哪个环节、哪个模型、多少 token、多少钱
 
 export interface ChatMessage {
@@ -30,6 +32,10 @@ export interface GenerateOptions {
   messages: ChatMessage[];
   refId?: string;
   temperature?: number;
+  /** 手动指定模型别名，覆盖环节默认值 */
+  model?: string;
+  /** 模型服务端执行的工具，例如 { type: "x_search", from_date, to_date } */
+  tools?: Record<string, unknown>[];
 }
 
 export interface GatewayConfig {
@@ -37,11 +43,18 @@ export interface GatewayConfig {
   apiKey: string;
   usage: UsageSink;
   fetch?: typeof fetch;
+  /** 带工具的请求（Grok 搜 X）直连 xAI，不经过 LiteLLM；没配就仍走网关 */
+  xai?: { apiKey: string; model: string; baseUrl?: string };
 }
 
 interface ChatCompletionResponse {
   choices: { message: { content: string | null } }[];
   usage?: { prompt_tokens?: number; completion_tokens?: number };
+}
+
+interface ResponsesResponse {
+  output?: { type: string; content?: { type: string; text?: string }[] }[];
+  usage?: { input_tokens?: number; output_tokens?: number };
 }
 
 export class LlmGateway {
@@ -52,39 +65,61 @@ export class LlmGateway {
   async generate<T>(
     opts: GenerateOptions & { json?: false | z.ZodType<T> },
   ): Promise<string | T> {
-    const model = modelFor(opts.step);
-    const extra = STEP_PARAMS[opts.step];
     const doFetch = this.config.fetch ?? fetch;
+    const useResponses = Boolean(opts.tools?.length);
+    const direct = useResponses ? this.config.xai : undefined;
+    const model = direct ? direct.model : (opts.model ?? modelFor(opts.step));
+    const base = (direct ? (direct.baseUrl ?? "https://api.x.ai") : this.config.baseUrl).replace(/\/$/, "");
 
-    const res = await doFetch(`${this.config.baseUrl.replace(/\/$/, "")}/v1/chat/completions`, {
+    const res = await doFetch(`${base}/v1/${useResponses ? "responses" : "chat/completions"}`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${this.config.apiKey}`,
+        authorization: `Bearer ${direct ? direct.apiKey : this.config.apiKey}`,
       },
-      body: JSON.stringify({
-        model,
-        messages: opts.messages,
-        temperature: opts.temperature ?? 0.7,
-        ...extra,
-        // 带搜索工具时部分模型不支持 JSON 模式，只靠提示词约束格式
-        ...(opts.json && !extra?.tools ? { response_format: { type: "json_object" } } : {}),
-      }),
+      body: JSON.stringify(
+        useResponses
+          ? // 带搜索工具时不开 JSON 模式，只靠提示词约束格式
+            { model, input: opts.messages, tools: opts.tools, temperature: opts.temperature ?? 0.7 }
+          : {
+              model,
+              messages: opts.messages,
+              temperature: opts.temperature ?? 0.7,
+              ...(opts.json ? { response_format: { type: "json_object" } } : {}),
+            },
+      ),
     });
 
     if (!res.ok) {
       throw new Error(`模型网关返回 ${res.status}：${await res.text()}`);
     }
 
-    const body = (await res.json()) as ChatCompletionResponse;
-    const text = body.choices[0]?.message.content ?? "";
+    let text: string;
+    let inputTokens: number;
+    let outputTokens: number;
+    if (useResponses) {
+      const body = (await res.json()) as ResponsesResponse;
+      text = (body.output ?? [])
+        .filter((item) => item.type === "message")
+        .flatMap((item) => item.content ?? [])
+        .filter((part) => part.type === "output_text")
+        .map((part) => part.text ?? "")
+        .join("");
+      inputTokens = body.usage?.input_tokens ?? 0;
+      outputTokens = body.usage?.output_tokens ?? 0;
+    } else {
+      const body = (await res.json()) as ChatCompletionResponse;
+      text = body.choices[0]?.message.content ?? "";
+      inputTokens = body.usage?.prompt_tokens ?? 0;
+      outputTokens = body.usage?.completion_tokens ?? 0;
+    }
 
     await this.config.usage.record({
       org_id: opts.orgId,
       step: opts.step,
       model,
-      input_tokens: body.usage?.prompt_tokens ?? 0,
-      output_tokens: body.usage?.completion_tokens ?? 0,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
       // LiteLLM 代理在响应头里给出本次调用的费用（美元）
       cost: Number(res.headers.get("x-litellm-response-cost") ?? 0) || 0,
       ref_id: opts.refId ?? null,

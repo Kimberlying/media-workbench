@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Card, Empty, PageHeader, buttonClass, ghostButtonClass, inputClass } from "@/components/ui";
+import { formatsFor } from "@/lib/content/formats";
 import type { Account, Topic } from "@/lib/db/types";
 import { addDays, weekStart } from "@/lib/dates";
 import { requireSession } from "@/lib/session";
@@ -70,18 +71,20 @@ export default async function TopicsPage({ searchParams }: PageProps<"/topics">)
 
               <div className="mt-3 flex flex-wrap items-end gap-3">
                 <form action={requestContents.bind(null, t.id)} className="flex flex-wrap items-center gap-2">
-                  {accounts.map((a) => (
-                    <label key={a.id} className="flex items-center gap-1 text-sm">
-                      <input
-                        type="checkbox"
-                        name="accountIds"
-                        value={a.id}
-                        defaultChecked={a.id === t.account_id}
-                        disabled={!a.profile_id}
-                      />
-                      {a.platform} @{a.handle}
-                    </label>
-                  ))}
+                  {accounts.flatMap((a) =>
+                    formatsFor(a.platform).map((f, i) => (
+                      <label key={`${a.id}|${f.id}`} className="flex items-center gap-1 text-sm">
+                        <input
+                          type="checkbox"
+                          name="targets"
+                          value={`${a.id}|${f.id}`}
+                          defaultChecked={a.id === t.account_id && i === 0}
+                          disabled={!a.profile_id}
+                        />
+                        {f.label} @{a.handle}
+                      </label>
+                    )),
+                  )}
                   <button className={buttonClass}>生成文案</button>
                 </form>
                 {!showWeek ? (

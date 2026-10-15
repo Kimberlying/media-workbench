@@ -14,11 +14,6 @@ model_list:
       model: gemini/gemini-flash-latest
       api_key: os.environ/GEMINI_API_KEY
 
-  # 全网动态：请求里会带 googleSearch 工具（见 src/lib/llm/models.ts 的 STEP_PARAMS）
-  - model_name: gemini-search
-    litellm_params:
-      model: gemini/gemini-flash-latest
-      api_key: os.environ/GEMINI_API_KEY
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

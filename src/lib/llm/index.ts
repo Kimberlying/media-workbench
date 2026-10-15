@@ -19,6 +19,9 @@ export function getGateway(): LlmGateway {
     baseUrl: requireEnv("LLM_GATEWAY_URL"),
     apiKey: requireEnv("LLM_GATEWAY_KEY"),
     usage: supabaseUsageSink,
+    xai: process.env.XAI_API_KEY
+      ? { apiKey: process.env.XAI_API_KEY, model: process.env.XAI_MODEL || "grok-4.7" }
+      : undefined,
   });
   return gateway;
 }

@@ -23,7 +23,7 @@ export type PlannedTopic = z.infer<typeof TopicBatch>["topics"][number];
 
 export function buildTopicPrompt(profile: AccountProfile, news: NewsItem[], count: number) {
   const newsList = news
-    .map((n) => `[${n.id}] ${n.title}｜${n.summary}｜标签：${n.tags.join("、")}`)
+    .map((n) => `[${n.id}] ${n.title}｜${n.summary}｜来源：${n.source}${n.heat ? `（热度 ${n.heat}）` : ""}｜标签：${n.tags.join("、")}`)
     .join("\n");
   return [
     {

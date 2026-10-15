@@ -1,5 +1,5 @@
 import type { MetricSnapshot } from "@/lib/db/types";
-import { splitThread, type PlatformConnector } from "./types";
+import { PublishRejected, splitThread, type PlatformConnector } from "./types";
 
 // X API v2。需要用户上下文的 OAuth 2.0 访问令牌（tweet.write、tweet.read、users.read）。
 // 一期只发文字和推文串；媒体上传二期再接。
@@ -47,9 +47,11 @@ export const xConnector: PlatformConnector = {
           ...(replyTo ? { reply: { in_reply_to_tweet_id: replyTo } } : {}),
         }),
       });
-      const json = (await res.json()) as CreateTweetResponse;
+      const json = (await res.json().catch(() => ({}))) as CreateTweetResponse;
       if (!res.ok || !json.data) {
-        throw new Error(`X 发布失败（${res.status}）：${json.errors?.[0]?.message ?? "未知错误"}`);
+        const message = `X 发布失败（${res.status}）：${json.errors?.[0]?.message ?? "未知错误"}`;
+        // 第一条就被拒：什么都没发出去，可以放心重试；推文串发到一半则不确定
+        throw firstId ? new Error(`${message}；推文串已发出前 ${parts.indexOf(text)} 条`) : new PublishRejected(message);
       }
       firstId ??= json.data.id;
       replyTo = json.data.id;

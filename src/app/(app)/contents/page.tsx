@@ -1,14 +1,19 @@
 import Link from "next/link";
 import { Card, Empty, PageHeader, buttonClass, ghostButtonClass, inputClass } from "@/components/ui";
 import { TzOffsetInput } from "@/components/tz-offset-input";
-import { getConnector } from "@/lib/connectors";
+import { PackSummary } from "@/components/pack-summary";
+import { RewriteForm } from "./rewrite-form";
+import { publishesViaApi } from "@/lib/connectors";
+import { formatOfVariant } from "@/lib/content/formats";
 import { STATUS_LABELS } from "@/lib/content/status";
 import type { Account, Content, ContentStatus } from "@/lib/db/types";
 import { requireSession } from "@/lib/session";
 import {
   approveContent,
   markPublishedManually,
+  regenerateXPost,
   rejectContent,
+  resolveUncertainPublish,
   saveContentBody,
   scheduleContent,
   submitContent,
@@ -24,15 +29,22 @@ export default async function ContentsPage({ searchParams }: PageProps<"/content
 
   const { data } = await supabase
     .from("contents")
-    .select("*, account:accounts(*)")
+    .select("*, account:accounts(*), posts(id, platform_post_id)")
     .eq("status", status)
     .order(status === "scheduled" ? "scheduled_at" : "updated_at", { ascending: status === "scheduled" })
     .limit(50);
-  const contents = (data ?? []) as (Content & { account: Account })[];
+  const contents = (data ?? []) as (Content & {
+    account: Account;
+    posts: { id: string; platform_post_id: string | null }[];
+  })[];
+  const { data: accountRows } = await supabase.from("accounts").select("*").order("created_at");
 
   return (
     <>
       <PageHeader title="内容" />
+      <div className="mb-4">
+        <RewriteForm accounts={(accountRows ?? []) as Account[]} />
+      </div>
       <div className="mb-4 flex flex-wrap gap-2">
         {tabs.map((t) => (
           <Link key={t} href={`/contents?status=${t}`} className={t === status ? buttonClass : ghostButtonClass}>
@@ -46,34 +58,67 @@ export default async function ContentsPage({ searchParams }: PageProps<"/content
       ) : (
         <div className="grid gap-3">
           {contents.map((c) => {
-            const viaApi = getConnector(c.account.platform).supportsApiPublish;
+            const viaApi = publishesViaApi(c.account.platform, c.variant);
+            const format = formatOfVariant(c.variant);
             return (
               <Card key={c.id}>
                 <div className="mb-2 flex flex-wrap gap-2 text-xs text-zinc-500">
                   <span>
                     {c.account.platform} @{c.account.handle}
                   </span>
-                  <span>{c.variant}</span>
+                  <span>{format.label}</span>
                   {c.scheduled_at ? <span>定时 {new Date(c.scheduled_at).toLocaleString("zh-CN")}</span> : null}
                   {!viaApi ? <span>发布包 · 人工发</span> : null}
                 </div>
+                {status === "scheduled" && viaApi && c.posts.some((p) => !p.platform_post_id) ? (
+                  <form
+                    action={resolveUncertainPublish.bind(null, c.id)}
+                    className="mb-2 flex flex-wrap items-center gap-2 rounded bg-amber-50 p-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                  >
+                    <span>发布中断，结果不确定，不会自动重发。请到 X 上看看有没有发出去：</span>
+                    <input name="url" placeholder="发出去了就贴链接" className={`${inputClass} w-56`} />
+                    <button name="outcome" value="published" className={ghostButtonClass}>
+                      已发出
+                    </button>
+                    <button name="outcome" value="not_published" className={ghostButtonClass}>
+                      没发出，重新排队
+                    </button>
+                  </form>
+                ) : null}
                 {c.compliance_hits.length > 0 ? (
                   <p className="mb-2 text-sm text-red-600">命中禁用词：{c.compliance_hits.join("、")}，改完再提交。</p>
                 ) : null}
 
                 {status === "draft" ? (
                   <form action={saveContentBody.bind(null, c.id)} className="grid gap-2">
-                    <textarea name="body" defaultValue={c.body} rows={8} className={inputClass} />
+                    <textarea
+                      name="body"
+                      defaultValue={c.body}
+                      rows={format.kind === "longform" ? 20 : 8}
+                      className={inputClass}
+                    />
                     <div className="flex gap-2">
                       <button className={ghostButtonClass}>保存</button>
                       <button formAction={submitContent.bind(null, c.id)} className={buttonClass}>
                         提交
                       </button>
+                      {c.pack?.kind === "post" && c.pack.source ? (
+                        <button formAction={regenerateXPost.bind(null, c.id)} className={ghostButtonClass}>
+                          重出
+                        </button>
+                      ) : null}
                     </div>
                   </form>
                 ) : (
-                  <pre className="whitespace-pre-wrap font-sans text-sm">{c.body}</pre>
+                  <details open={format.kind !== "longform"}>
+                    <summary className="cursor-pointer text-sm text-zinc-500">
+                      {c.pack?.kind === "longform" ? c.pack.title : "正文"}
+                    </summary>
+                    <pre className="mt-2 whitespace-pre-wrap font-sans text-sm">{c.body}</pre>
+                  </details>
                 )}
+
+                {c.pack ? <PackSummary contentId={c.id} pack={c.pack} body={c.body} /> : null}
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   {status === "pending_approval" ? (
