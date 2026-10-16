@@ -1,14 +1,20 @@
 import { strToU8, zipSync } from "fflate";
-import type { DownloadablePack } from "./schema";
+import type { CardsFile, DownloadablePack } from "./schema";
 
-// 把内容包导出成 build-xhs-content-pack 的目录结构，下载后可以直接用它的脚本出图：
-//   python3 scripts/render_cards.py cards/cards.json --output-dir images
+// 把内容包导出成 build-xhs-content-pack 的目录结构。图片由工作台出好放在 images/ 里；
+// 想换风格重出，也可以用它的脚本：python3 scripts/render_cards.py cards/cards.json --output-dir images
+
+/** 内容包里要出图的那组卡片：小红书卡片，或公众号贴图；X 长文没有 */
+export function packCards(pack: DownloadablePack): CardsFile | null {
+  if (pack.kind === "xhs") return pack.cards;
+  return pack.graphics && pack.graphics.cards.length > 0 ? pack.graphics : null;
+}
 
 const RENDER_HELP = (cardsPath: string, imagesDir: string) =>
   [
     "# 出图",
     "",
-    "图片用 build-xhs-content-pack 的渲染脚本生成（需要 Python 和 Pillow）：",
+    `图片已经由工作台出好，在 ${imagesDir}/ 里。想换一种风格重出，用 build-xhs-content-pack 的渲染脚本（需要 Python 和 Pillow）：`,
     "",
     "```bash",
     "git clone https://github.com/Kimberlying/build-xhs-content-pack",
@@ -103,6 +109,10 @@ export function packFiles(input: { body: string; pack: DownloadablePack }): Reco
   return files;
 }
 
-export function zipPack(files: Record<string, string>): Uint8Array {
-  return zipSync(Object.fromEntries(Object.entries(files).map(([path, text]) => [path, strToU8(text)])));
+export function zipPack(files: Record<string, string | Uint8Array>): Uint8Array {
+  return zipSync(
+    Object.fromEntries(
+      Object.entries(files).map(([path, data]) => [path, typeof data === "string" ? strToU8(data) : data]),
+    ),
+  );
 }

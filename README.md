@@ -15,6 +15,7 @@
 | X 短推 | 从选题生成，或把一段素材「润色」「翻译」成一条短推；不超过 250 字、无 emoji、不以问号结尾、不加互动引导，可选模型、可重出。规则沿用 [tweet-buffer-workflow](https://github.com/Kimberlying/tweet-buffer-workflow) | `src/lib/content/x-post.ts`、`src/app/(app)/contents/rewrite-form.tsx` |
 | 长文 | X 长文；公众号长文由同一篇 X 长文改写，并配 3–6 张横版贴图 | `src/lib/xhs/prompts.ts` |
 | 小红书内容包 | brief → 8–12 张知识卡 → 标题、正文、标签、检查，结构沿用 [build-xhs-content-pack](https://github.com/Kimberlying/build-xhs-content-pack) | `src/lib/xhs/` |
+| 卡片出图（二期第一项） | 小红书卡片和公众号贴图在工作台里直接出 PNG：「内容」页可预览，下载的发布包里带好 `images/`。四套风格、六种版式移植自 build-xhs-content-pack 的 `render_cards.py` | `src/lib/cards/` |
 | 知识库（简版） | 语气指南、禁用词、历史爆款等，生成时自动带上 | `src/app/(app)/knowledge` |
 | 合规（一期） | 禁用词检查，命中则留在草稿并标出命中词 | `src/lib/content/compliance.ts` |
 | 发布排期 | X 短推和推文串走 API 定时发；发布结果不确定时不自动重发，在「内容」页人工核对后登记；X 长文、公众号、小红书等生成发布包（zip），人工发后登记 | `src/lib/connectors/`、`src/app/api/contents/[id]/pack` |
@@ -23,20 +24,22 @@
 
 内容状态：草稿 → 合规检查 → 待审批 → 已批准 → 已排期 → 已发布，任一审批环节可退回草稿。自用组织默认关闭审批（`orgs.settings.approval_required = false`），合规通过直接到已批准。
 
-不在一期：视觉生成、视频剪辑、多级审批台、IG / FB / LinkedIn 的 API 接入、互动回复、订阅计费，以及资讯雷达里的对标账号视频转录。
+不在一期：AI 生图（封面、配图）、视频剪辑、多级审批台、IG / FB / LinkedIn 的 API 接入、互动回复、订阅计费，以及资讯雷达里的对标账号视频转录。
 
 ## 发布包和出图
 
-长文和小红书内容在「内容」页可以下载发布包。小红书包的目录和 `cards/cards.json` 与 build-xhs-content-pack 一致，用它的脚本出图：
+长文和小红书内容在「内容」页可以预览卡片、下载发布包。卡片图片由工作台用 `next/og` 当场出好放在包里的 `images/`，中文字体按需从 Google Fonts 取用到的字。
+
+包的目录和 `cards/cards.json` 与 build-xhs-content-pack 一致，想换风格重出也可以用它的脚本：
 
 ```bash
 git clone https://github.com/Kimberlying/build-xhs-content-pack
 cd build-xhs-content-pack/skills/build-xhs-content-pack
 python3 -m pip install -r scripts/requirements.txt
-python3 scripts/render_cards.py <发布包>/cards/cards.json --output-dir <发布包>/images
+python3 scripts/render_cards.py <发布包>/cards/cards.json --output-dir <发布包>/images --theme reading-card
 ```
 
-公众号包里的 `cards.json` 是 1200×675 横版贴图，用同一个命令出图。工作台里出图放在二期（视觉生成）。
+改风格配色时，`src/lib/cards/themes.ts` 和它的 `assets/themes.json` 两边保持一致。
 
 ## 技术栈
 
