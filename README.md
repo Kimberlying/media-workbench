@@ -43,7 +43,7 @@ python3 scripts/render_cards.py <发布包>/cards/cards.json --output-dir <发�
 - **Next.js 16**（App Router、Server Actions）：页面和接口一套代码
 - **Supabase**：Postgres、邮箱登录、行级安全
 - **Inngest**：定时抓资讯、批量生成、定时发布、拉数据，可重试、看日志
-- **LiteLLM 代理**：业务代码只用模型别名（`grok`、`gemini-flash`），每个环节用哪个模型在 `src/lib/llm/models.ts` 和 `litellm/config.yaml` 里配
+- **模型**：业务代码只用模型别名（`grok`、`gemini-flash`），每个环节用哪个别名在 `src/lib/llm/models.ts` 里配。默认按 key 直连 xAI 和 Gemini（`src/lib/llm/providers.ts`）；配了 `LLM_GATEWAY_URL` 就改走 LiteLLM 代理（`litellm/config.yaml`）
 - 平台令牌 AES-256-GCM 加密存在 `account_secrets`，这张表不开放任何 RLS 策略，只有后台任务能读
 
 流水线按固定顺序跑，大模型只负责每一步里的生成，不让 Agent 自由调度。
@@ -53,7 +53,7 @@ python3 scripts/render_cards.py <发布包>/cards/cards.json --output-dir <发�
 1. 安装依赖：`npm install`
 2. 复制环境变量：`cp .env.example .env.local`，按注释填好
 3. 建 Supabase 项目，执行 `supabase/migrations/` 下的 SQL（Supabase CLI：`supabase link` 后 `supabase db push`；或直接粘到 SQL Editor）。Authentication → URL Configuration 里把 `{APP_URL}/auth/callback` 加进 Redirect URLs
-4. 启动模型网关：见 `litellm/config.yaml` 顶部的命令
+4. 模型：填好 `XAI_API_KEY` 和 `GEMINI_API_KEY` 就能用，可以跑 `npm run check:models` 用真 key 核对一遍（会花几分钱）。想走 LiteLLM 时见 `litellm/config.yaml` 顶部的命令
 5. 启动 Inngest 本地开发服务：`npx inngest-cli@latest dev -u http://localhost:3000/api/inngest`
 6. 启动应用：`npm run dev`，打开 http://localhost:3000 用邮箱登录。首次登录自动创建你的自用组织和工作区
 
@@ -74,7 +74,8 @@ npm run build
 - 加一个 X 小号：在「账号与档案」再连接一个 X 账号并填一份档案，不改代码
 - 加一个平台：在 `src/lib/connectors/` 实现 `PlatformConnector`（`publish` 和 `fetchMetrics`），在 `index.ts` 注册，主流程不动
 
-## 上线前要核实
+## 上线
 
-- X API 的套餐、发帖和读数据的额度与价格
-- `litellm/config.yaml` 里的模型 ID，以及 `XAI_MODEL`（资讯雷达直连 xAI 搜 X 用的模型，默认 `grok-4.7`）
+部署到 Vercel + Supabase + Inngest Cloud 的步骤见 [docs/deploy.md](docs/deploy.md)。
+
+已核对（2026-10）：xAI 文档的 `x_search` 示例用的就是 `grok-4.7`，走 Responses 接口；X API 已改为按量付费，发帖 0.015 美元一条、带链接 0.20 美元。拿到 key 后用 `npm run check:models` 实测一遍。

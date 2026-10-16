@@ -1,4 +1,4 @@
-// 每个环节用哪个模型。值是模型网关（LiteLLM）里配置的别名，见 litellm/config.yaml。
+// 每个环节用哪个模型。值是模型别名：走 LiteLLM 时见 litellm/config.yaml，直连时见 providers.ts。
 // 换模型只改这里或网关配置，不改业务代码。
 
 export const STEPS = [
@@ -41,4 +41,18 @@ export function modelFor(step: Step, overrides = process.env.LLM_MODEL_OVERRIDES
     }
   }
   return DEFAULT_MODELS[step];
+}
+
+// 直连（不经过 LiteLLM）时按这里的单价记费用，美元 / 百万 token。没列的模型记 0。
+// 来源：docs.x.ai/developers/pricing、ai.google.dev/gemini-api/docs/pricing（2026-10 查）。
+// Grok 搜 X 另按抓到的帖子计费（每千条 5 美元），这里没算进去。
+const PRICES: Record<string, { input: number; output: number }> = {
+  "grok-4.7": { input: 2, output: 6 },
+  "gemini-3.8-flash": { input: 0.75, output: 3.75 }, // 2027-01-01 起涨到 1.5 / 7.5
+};
+
+export function costOf(model: string, inputTokens: number, outputTokens: number): number {
+  const price = PRICES[model];
+  if (!price) return 0;
+  return (inputTokens * price.input + outputTokens * price.output) / 1_000_000;
 }

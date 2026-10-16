@@ -1,8 +1,9 @@
 import type { z } from "zod";
-import { modelFor, type Step } from "./models";
+import { costOf, modelFor, type Step } from "./models";
 
 // 模型网关：所有生成都经过这里。
-// - 调用 OpenAI 兼容接口（LiteLLM 代理），模型由 step 决定
+// - 调用 OpenAI 兼容接口，模型由 step 决定：配了 LiteLLM 代理就走代理；没配就按别名直连各家
+//   （xAI、Gemini 都有 OpenAI 兼容接口），上线少托管一个服务
 // - 带服务端工具（如 Grok 的 x_search）时走 Responses 接口，xAI 只在这个接口上提供搜索工具；
 //   配了 xAI 的 key 就直连 xAI（kim 2026-10-14 决定用 xAI 的 Grok API 搜 X 热点）
 // - 每次调用写一条 usage_logs：哪个租户、哪个环节、哪个模型、多少 token、多少钱
@@ -38,9 +39,19 @@ export interface GenerateOptions {
   tools?: Record<string, unknown>[];
 }
 
-export interface GatewayConfig {
+/** 直连的一家模型接口。baseUrl 带版本路径，例如 https://api.x.ai/v1 */
+export interface Provider {
   baseUrl: string;
   apiKey: string;
+  model: string;
+}
+
+export interface GatewayConfig {
+  /** LiteLLM 代理；不配就只用 providers 直连 */
+  baseUrl?: string;
+  apiKey?: string;
+  /** 按别名直连，例如 { grok: {...}, "gemini-flash": {...} }；代理和直连都有时，别名在这里的优先直连 */
+  providers?: Record<string, Provider>;
   usage: UsageSink;
   fetch?: typeof fetch;
   /** 带工具的请求（Grok 搜 X）直连 xAI，不经过 LiteLLM；没配就仍走网关 */
@@ -67,15 +78,14 @@ export class LlmGateway {
   ): Promise<string | T> {
     const doFetch = this.config.fetch ?? fetch;
     const useResponses = Boolean(opts.tools?.length);
-    const direct = useResponses ? this.config.xai : undefined;
-    const model = direct ? direct.model : (opts.model ?? modelFor(opts.step));
-    const base = (direct ? (direct.baseUrl ?? "https://api.x.ai") : this.config.baseUrl).replace(/\/$/, "");
+    const target = this.target(opts.model ?? modelFor(opts.step), useResponses);
+    const model = target.model;
 
-    const res = await doFetch(`${base}/v1/${useResponses ? "responses" : "chat/completions"}`, {
+    const res = await doFetch(`${target.baseUrl}/${useResponses ? "responses" : "chat/completions"}`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${direct ? direct.apiKey : this.config.apiKey}`,
+        authorization: `Bearer ${target.apiKey}`,
       },
       body: JSON.stringify(
         useResponses
@@ -120,13 +130,25 @@ export class LlmGateway {
       model,
       input_tokens: inputTokens,
       output_tokens: outputTokens,
-      // LiteLLM 代理在响应头里给出本次调用的费用（美元）
-      cost: Number(res.headers.get("x-litellm-response-cost") ?? 0) || 0,
+      // 走 LiteLLM 时用它在响应头里给的费用（美元）；直连时按 models.ts 里的单价算
+      cost: Number(res.headers.get("x-litellm-response-cost")) || costOf(model, inputTokens, outputTokens),
       ref_id: opts.refId ?? null,
     });
 
     if (!opts.json) return text;
     return opts.json.parse(JSON.parse(stripCodeFence(text)));
+  }
+
+  // 这次请求发到哪：带工具且配了 xAI → 直连 xAI；别名有直连配置 → 直连；否则走 LiteLLM
+  private target(alias: string, useResponses: boolean): Provider {
+    const { xai, providers, baseUrl, apiKey } = this.config;
+    if (useResponses && xai) {
+      return { baseUrl: `${(xai.baseUrl ?? "https://api.x.ai").replace(/\/$/, "")}/v1`, apiKey: xai.apiKey, model: xai.model };
+    }
+    const direct = providers?.[alias];
+    if (direct) return { ...direct, baseUrl: direct.baseUrl.replace(/\/$/, "") };
+    if (baseUrl && apiKey) return { baseUrl: `${baseUrl.replace(/\/$/, "")}/v1`, apiKey, model: alias };
+    throw new Error(`模型 ${alias} 没有可用的接口：配 LLM_GATEWAY_URL，或配这家模型的 API key，见 .env.example`);
   }
 }
 
