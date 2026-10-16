@@ -1,7 +1,18 @@
 import { Card, PageHeader, buttonClass, ghostButtonClass, inputClass } from "@/components/ui";
+import { BufferClient, type BufferChannel } from "@/lib/buffer/client";
 import type { Account, AccountProfile } from "@/lib/db/types";
 import { requireSession } from "@/lib/session";
-import { addManualAccount, saveProfile } from "../actions";
+import { addManualAccount, saveProfile, setBufferChannel } from "../actions";
+
+/** 配了 BUFFER_API_KEY 时列出 Buffer 里的频道，供每个账号选；读不到就手填频道 id */
+async function loadBufferChannels(): Promise<BufferChannel[] | null> {
+  if (!process.env.BUFFER_API_KEY) return null;
+  try {
+    return await new BufferClient(process.env.BUFFER_API_KEY).channels();
+  } catch {
+    return null;
+  }
+}
 
 const PLATFORM_LABELS = {
   x: "X",
@@ -21,6 +32,7 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
     .select("*, profile:account_profiles(*)")
     .order("created_at");
   const accounts = (data ?? []) as (Account & { profile: AccountProfile | null })[];
+  const channels = await loadBufferChannels();
 
   return (
     <>
@@ -39,13 +51,36 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
                 {PLATFORM_LABELS[a.platform]} @{a.handle}
               </span>
               <span className="text-xs text-zinc-500">
-                {a.platform === "x"
-                  ? a.token_ref
-                    ? "已授权，推文串可自动发布；长文出发布包"
-                    : "未授权"
-                  : "发布包 · 人工发"}
+                {a.buffer_channel_id
+                  ? "经 Buffer 发布"
+                  : a.platform === "x"
+                    ? a.token_ref
+                      ? "已授权，推文串可自动发布；长文出发布包"
+                      : "未授权"
+                    : "发布包 · 人工发"}
               </span>
             </div>
+            <form action={setBufferChannel.bind(null, a.id)} className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-zinc-500">Buffer 频道</span>
+              {channels ? (
+                <select name="buffer_channel_id" defaultValue={a.buffer_channel_id ?? ""} className={`${inputClass} w-auto`}>
+                  <option value="">不经 Buffer</option>
+                  {channels.map((ch) => (
+                    <option key={ch.id} value={ch.id}>
+                      {ch.name} · {ch.service}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  name="buffer_channel_id"
+                  defaultValue={a.buffer_channel_id ?? ""}
+                  placeholder="频道 id；配了 BUFFER_API_KEY 会改成下拉选"
+                  className={`${inputClass} w-72`}
+                />
+              )}
+              <button className={ghostButtonClass}>保存</button>
+            </form>
             <form action={saveProfile.bind(null, a.id)} className="grid gap-3 md:grid-cols-2">
               <Field label="账号定位" name="positioning" value={a.profile?.positioning} rows={2} />
               <Field label="目标受众" name="audience" value={a.profile?.audience} rows={2} />

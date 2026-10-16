@@ -1,10 +1,11 @@
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { BufferClient } from "@/lib/buffer/client";
 import { LlmGateway, type UsageRecord } from "@/lib/llm/gateway";
 import { directProviders } from "@/lib/llm/providers";
 
-// 上线前用真 key 核对模型：npm run check:models（读 .env.local，会花几分钱）。
+// 上线前用真 key 核对模型和 Buffer：npm run check:models（读 .env.local，会花几分钱；Buffer 只读频道，不发帖）。
 // 平时 npm test 不带 LIVE=1，这里整组跳过。
 
 const live = process.env.LIVE === "1";
@@ -45,5 +46,13 @@ describe.skipIf(!live)("真实模型接口", () => {
     });
     expect(text).toMatch(/x\.com|twitter\.com/);
     console.log(text, records);
+  });
+});
+
+describe.skipIf(!live || !process.env.BUFFER_API_KEY)("Buffer 接口", () => {
+  it("能列出频道", { timeout: 30_000 }, async () => {
+    const channels = await new BufferClient(process.env.BUFFER_API_KEY!).channels();
+    console.log(channels);
+    expect(channels.length).toBeGreaterThan(0);
   });
 });

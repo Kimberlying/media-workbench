@@ -62,6 +62,8 @@ export interface Account {
   handle: string;
   profile_id: string | null;
   token_ref: string | null;
+  /** 经 Buffer 发布时的频道 id */
+  buffer_channel_id: string | null;
 }
 
 export interface NewsItem {
@@ -102,6 +104,10 @@ export interface Content {
   /** 长文和小红书内容包的结构化部分（卡片、标题、检查结果） */
   pack: ContentPack | null;
   scheduled_at: string | null;
+  /** 交给 Buffer 的图片地址（公开 HTTPS） */
+  media_urls: string[];
+  /** 推到 Telegram 审核的消息 id */
+  telegram_message_id: number | null;
 }
 
 export interface Post {
@@ -110,7 +116,7 @@ export interface Post {
   content_id: string;
   platform_post_id: string | null;
   published_at: string;
-  method: "api" | "manual";
+  method: "api" | "manual" | "buffer";
 }
 
 export interface MetricSnapshot {

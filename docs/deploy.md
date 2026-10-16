@@ -47,6 +47,23 @@
 - X：developer.x.com 建 App（现在是按量付费，没有免费档，先在 Developer Console 充值并设消费上限）。User authentication settings 里类型选 Web App，权限 Read and write，回调地址 `https://<线上域名>/api/connect/x/callback`，拿到 Client ID / Secret 填进环境变量后 Redeploy。
   - 费用参考（2026-09 的价目）：发一条帖 0.015 美元，带链接的帖 0.20 美元；读自己的帖子数据每条 0.001 美元。每天发几条，一个月几美元。
 
+## 5b. Buffer 和 Telegram（LinkedIn、Instagram 经 Buffer 发；你）
+
+1. Buffer 里连好 LinkedIn 和 Instagram 频道（Instagram 要是商业或创作者账号），在 Settings → API 生成个人 API key，填进 `BUFFER_API_KEY`。
+2. 工作台「账号与档案」添加 LinkedIn、Instagram 账号，在每个账号的「Buffer 频道」里选对应的频道。
+3. 想在 Telegram 里审核：@BotFather 建一个机器人，填好 `TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`、`TELEGRAM_WEBHOOK_SECRET` 后 Redeploy，再在终端设一次 webhook：
+
+   ```bash
+   curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
+     -d url=https://<线上域名>/api/telegram/webhook \
+     -d secret_token=<TELEGRAM_WEBHOOK_SECRET> \
+     -d 'allowed_updates=["callback_query"]'
+   ```
+
+   一个机器人只能有一个 webhook。Mac 上的旧脚本如果还在用同一个机器人收消息，就另建一个机器人给工作台用。
+
+用法：内容批准后，「内容」页的「已批准」里有「交给 Buffer」四个按钮（存草稿 / 进入队列 / 队列置顶 / 现在发送），或者点「推到 Telegram」，在 TG 里点同样的按钮；「现在发送」在 TG 里要再点一次确认。Instagram 要先填至少一张图片地址（公开的 https 链接，Buffer 不收文件上传）。交给 Buffer 时如果中断、结果不确定，工作台不会重发，会提示你到 Buffer 核对。
+
 ## 6. 第一次登录
 
 1. 打开线上域名，用邮箱登录，首次登录会自动建好你的组织和工作区。

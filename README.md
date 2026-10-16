@@ -18,13 +18,14 @@
 | 卡片出图（二期第一项） | 小红书卡片和公众号贴图在工作台里直接出 PNG：「内容」页可预览，下载的发布包里带好 `images/`。四套风格、六种版式移植自 build-xhs-content-pack 的 `render_cards.py` | `src/lib/cards/` |
 | 知识库（简版） | 语气指南、禁用词、历史爆款等，生成时自动带上 | `src/app/(app)/knowledge` |
 | 合规（一期） | 禁用词检查，命中则留在草稿并标出命中词 | `src/lib/content/compliance.ts` |
+| 经 Buffer 发布 | LinkedIn、Instagram（也可以给任意账号配）交给 Buffer：工作台里点「存草稿 / 进入队列 / 队列置顶 / 现在发送」，或先推到 Telegram 在 TG 里点；动作和防重发规则沿用 tweet-buffer-workflow | `src/lib/buffer/`、`src/lib/telegram/`、`src/app/api/telegram/webhook` |
 | 发布排期 | X 短推和推文串走 API 定时发；发布结果不确定时不自动重发，在「内容」页人工核对后登记；X 长文、公众号、小红书等生成发布包（zip），人工发后登记 | `src/lib/connectors/`、`src/app/api/contents/[id]/pack` |
 | 数据复盘 | 每天 3 点拉 X 帖子数据，按 7 / 30 天汇总 | `src/lib/pipeline/publish.ts`、`src/app/(app)/analytics` |
 | 多租户与计量 | Supabase RLS 按组织隔离；`usage_logs` 记录每次生成的模型、token、费用 | `supabase/migrations/`、`src/lib/llm/` |
 
 内容状态：草稿 → 合规检查 → 待审批 → 已批准 → 已排期 → 已发布，任一审批环节可退回草稿。自用组织默认关闭审批（`orgs.settings.approval_required = false`），合规通过直接到已批准。
 
-不在一期：AI 生图（封面、配图）、视频剪辑、多级审批台、IG / FB / LinkedIn 的 API 接入、互动回复、订阅计费，以及资讯雷达里的对标账号视频转录。
+不在一期：AI 生图（封面、配图）、视频剪辑、多级审批台、互动回复、订阅计费，以及资讯雷达里的对标账号视频转录。
 
 ## 发布包和出图
 
