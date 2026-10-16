@@ -13,7 +13,7 @@ const LAYOUT_LABELS: Record<string, string> = {
   prompt: "模板",
 };
 
-// 内容包的结构化部分：卡片顺序、标题备选、自动检查，以及下载发布包
+// 内容包的结构化部分：卡片预览、标题备选、自动检查，以及下载发布包（含出好的图片）
 export function PackSummary({ contentId, pack, body }: { contentId: string; pack: ContentPack; body: string }) {
   if (pack.kind === "post") {
     return (
@@ -45,11 +45,23 @@ export function PackSummary({ contentId, pack, body }: { contentId: string; pack
             {pack.kind === "xhs" ? "小红书卡片" : "公众号贴图"} {cards.cards.length} 张 ·{" "}
             {THEMES[cards.meta.theme]?.split("：")[0] ?? cards.meta.theme} · {cards.meta.width}×{cards.meta.height}
           </div>
-          <ol className="list-decimal pl-5">
-            {cards.cards.map((card) => (
-              <li key={card.file}>
-                <span className="text-zinc-500">[{LAYOUT_LABELS[card.layout] ?? card.layout}]</span>{" "}
-                {card.title || card.quote || card.prompt}
+          <ol className="mt-1 flex gap-2 overflow-x-auto pb-1">
+            {cards.cards.map((card, i) => (
+              <li key={card.file} className="w-28 shrink-0 text-xs">
+                <a href={`/api/contents/${contentId}/cards/${i + 1}`} target="_blank" rel="noreferrer">
+                  {/* 卡片图是接口当场出的 PNG，不走 next/image 的优化 */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/contents/${contentId}/cards/${i + 1}`}
+                    alt={card.title || card.quote || card.prompt || card.file}
+                    loading="lazy"
+                    className="w-full rounded border border-zinc-200 dark:border-zinc-800"
+                    style={{ aspectRatio: `${cards.meta.width} / ${cards.meta.height}` }}
+                  />
+                </a>
+                <div className="mt-1 truncate text-zinc-500">
+                  {i + 1}. [{LAYOUT_LABELS[card.layout] ?? card.layout}] {card.title || card.quote || card.prompt}
+                </div>
               </li>
             ))}
           </ol>
