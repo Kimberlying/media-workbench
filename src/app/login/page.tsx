@@ -34,7 +34,7 @@ async function LoginForm({ searchParams }: Pick<PageProps<"/login">, "searchPara
   return (
     <>
       {params.sent ? (
-        <p className="text-sm text-zinc-600">登录链接已发到邮箱，点开即可进入。</p>
+        <p className="text-sm text-muted">登录链接已发到邮箱，点开即可进入。</p>
       ) : (
         <form action={sendMagicLink} className="flex flex-col gap-3">
           <input
@@ -42,10 +42,10 @@ async function LoginForm({ searchParams }: Pick<PageProps<"/login">, "searchPara
             type="email"
             required
             placeholder="邮箱"
-            className="rounded border border-zinc-300 px-3 py-2"
+            className="rounded-xl border-0 bg-soft px-3 py-2.5"
           />
-          <button className="rounded bg-zinc-900 px-3 py-2 text-white">发送登录链接</button>
-          {params.error ? <p className="text-sm text-red-600">{String(params.error)}</p> : null}
+          <button className="rounded-xl bg-ink px-3 py-2.5 font-bold text-ink-fg">发送登录链接</button>
+          {params.error ? <p className="text-sm text-bad">{String(params.error)}</p> : null}
         </form>
       )}
     </>

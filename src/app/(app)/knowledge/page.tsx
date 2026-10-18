@@ -47,10 +47,10 @@ export default async function KnowledgePage() {
         {items.length === 0 ? <Empty>知识库还是空的。</Empty> : null}
         {items.map((item) => (
           <Card key={item.id}>
-            <div className="mb-1 flex items-center justify-between text-xs text-zinc-500">
+            <div className="mb-1 flex items-center justify-between text-xs text-muted">
               <span>{TYPE_LABELS[item.type]}</span>
               <form action={deleteKnowledge.bind(null, item.id)}>
-                <button className="hover:text-red-600">删除</button>
+                <button className="hover:text-bad">删除</button>
               </form>
             </div>
             <pre className="whitespace-pre-wrap font-sans text-sm">{item.content}</pre>

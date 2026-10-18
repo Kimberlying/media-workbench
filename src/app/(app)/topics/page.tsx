@@ -59,8 +59,8 @@ export default async function TopicsPage({ searchParams }: PageProps<"/topics">)
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="font-medium">{t.title}</div>
-                  <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{t.angle}</p>
-                  <div className="mt-1 text-xs text-zinc-500">
+                  <p className="mt-1 text-sm text-muted">{t.angle}</p>
+                  <div className="mt-1 text-xs text-muted">
                     {handleOf.get(t.account_id)} · 热度 {t.heat_score} · 相关性 {t.relevance_score}
                     {t.scheduled_week ? ` · ${t.scheduled_week} 这周` : ""}
                     {t.status === "selected" ? " · 文案生成中" : ""}

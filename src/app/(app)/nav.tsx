@@ -23,8 +23,8 @@ export function Nav() {
           <Link
             key={link.href}
             href={link.href}
-            className={`whitespace-nowrap rounded px-3 py-2 text-sm ${
-              active ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "hover:bg-zinc-200 dark:hover:bg-zinc-800"
+            className={`whitespace-nowrap rounded-xl px-3.5 py-2.5 text-[15px] font-medium ${
+              active ? "bg-panel text-foreground shadow-card" : "text-muted hover:bg-panel/60 hover:text-foreground"
             }`}
           >
             {link.label}

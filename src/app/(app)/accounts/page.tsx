@@ -29,7 +29,7 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
           连接 X 账号
         </a>
       </PageHeader>
-      {error ? <p className="mb-4 text-sm text-red-600">{String(error)}</p> : null}
+      {error ? <p className="mb-4 text-sm text-bad">{String(error)}</p> : null}
 
       <div className="grid gap-4">
         {accounts.map((a) => (
@@ -38,7 +38,7 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
               <span className="font-medium">
                 {PLATFORM_LABELS[a.platform]} @{a.handle}
               </span>
-              <span className="text-xs text-zinc-500">
+              <span className="text-xs text-muted">
                 {a.platform === "x"
                   ? a.token_ref
                     ? "已授权，推文串可自动发布；长文出发布包"
@@ -53,7 +53,7 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
               <Field label="不碰的话题 / 禁用词（逗号或换行分隔）" name="taboo" value={a.profile?.taboo.join("\n")} rows={2} />
               <Field label="对标账号与关注方向（资讯雷达按这里抓）" name="benchmarks" value={a.profile?.benchmarks.join("\n")} rows={3} />
               <label className="grid gap-1 text-sm">
-                <span className="text-zinc-500">语言</span>
+                <span className="text-muted">语言</span>
                 <select name="language" defaultValue={a.profile?.language ?? "zh-CN"} className={inputClass}>
                   <option value="zh-CN">简体中文</option>
                   <option value="zh-HK">繁体中文</option>
@@ -91,7 +91,7 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
 function Field({ label, name, value, rows }: { label: string; name: string; value?: string; rows: number }) {
   return (
     <label className="grid gap-1 text-sm">
-      <span className="text-zinc-500">{label}</span>
+      <span className="text-muted">{label}</span>
       <textarea name={name} defaultValue={value ?? ""} rows={rows} className={inputClass} />
     </label>
   );
