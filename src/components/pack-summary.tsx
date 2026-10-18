@@ -17,20 +17,20 @@ const LAYOUT_LABELS: Record<string, string> = {
 export function PackSummary({ contentId, pack, body }: { contentId: string; pack: ContentPack; body: string }) {
   if (pack.kind === "post") {
     return (
-      <div className="mt-2 text-xs text-zinc-500">
+      <div className="mt-2 text-xs text-muted">
         {countChars(body)}/{X_POST_MAX} 字符 · {pack.mode === "topic" ? "按选题生成" : MODE_LABELS[pack.mode]} · 模型 {pack.model}
         {pack.checks.length > 0 ? (
-          <span className="text-amber-700 dark:text-amber-400"> · 留意：{pack.checks.join("；")}</span>
+          <span className="text-warn"> · 留意：{pack.checks.join("；")}</span>
         ) : null}
       </div>
     );
   }
   const cards = pack.kind === "xhs" ? pack.cards : pack.graphics;
   return (
-    <div className="mt-3 grid gap-2 rounded border border-zinc-200 p-3 text-sm dark:border-zinc-800">
+    <div className="mt-3 grid gap-2 rounded-2xl bg-soft p-4 text-sm">
       {pack.kind === "xhs" ? (
         <div>
-          <div className="text-zinc-500">标题备选</div>
+          <div className="text-muted">标题备选</div>
           <ol className="list-decimal pl-5">
             {pack.titles.map((t) => (
               <li key={t}>{t}</li>
@@ -41,7 +41,7 @@ export function PackSummary({ contentId, pack, body }: { contentId: string; pack
 
       {cards && cards.cards.length > 0 ? (
         <div>
-          <div className="text-zinc-500">
+          <div className="text-muted">
             {pack.kind === "xhs" ? "小红书卡片" : "公众号贴图"} {cards.cards.length} 张 ·{" "}
             {THEMES[cards.meta.theme]?.split("：")[0] ?? cards.meta.theme} · {cards.meta.width}×{cards.meta.height}
           </div>
@@ -55,11 +55,11 @@ export function PackSummary({ contentId, pack, body }: { contentId: string; pack
                     src={`/api/contents/${contentId}/cards/${i + 1}`}
                     alt={card.title || card.quote || card.prompt || card.file}
                     loading="lazy"
-                    className="w-full rounded border border-zinc-200 dark:border-zinc-800"
+                    className="w-full rounded border border-line"
                     style={{ aspectRatio: `${cards.meta.width} / ${cards.meta.height}` }}
                   />
                 </a>
-                <div className="mt-1 truncate text-zinc-500">
+                <div className="mt-1 truncate text-muted">
                   {i + 1}. [{LAYOUT_LABELS[card.layout] ?? card.layout}] {card.title || card.quote || card.prompt}
                 </div>
               </li>
@@ -70,7 +70,7 @@ export function PackSummary({ contentId, pack, body }: { contentId: string; pack
 
       {pack.checks.length > 0 ? (
         <div>
-          <div className="text-amber-700 dark:text-amber-400">发布前留意</div>
+          <div className="text-warn">发布前留意</div>
           <ul className="list-disc pl-5">
             {pack.checks.map((c) => (
               <li key={c}>{c}</li>

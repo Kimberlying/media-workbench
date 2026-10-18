@@ -43,7 +43,7 @@ export function RewriteForm({ accounts }: { accounts: Account[] }) {
             </select>
             <button className={buttonClass}>生成审核稿</button>
           </div>
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted">
             不超过 {X_POST_MAX} 字符、2–4 个短段落、不用 emoji、结尾不用问号。生成后在「草稿」里审核，提交后才会排期发布。
           </p>
         </form>

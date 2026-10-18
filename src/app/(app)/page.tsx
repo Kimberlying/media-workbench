@@ -31,8 +31,8 @@ export default async function OverviewPage() {
         {stats.map((s) => (
           <Link key={s.label} href={s.href}>
             <Card>
-              <div className="text-2xl font-semibold">{s.value}</div>
-              <div className="text-sm text-zinc-500">{s.label}</div>
+              <div className="text-4xl font-black tabular-nums">{s.value}</div>
+              <div className="text-sm text-muted">{s.label}</div>
             </Card>
           </Link>
         ))}

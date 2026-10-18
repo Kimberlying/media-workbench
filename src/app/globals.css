@@ -1,20 +1,60 @@
 @import "tailwindcss";
 
+/* C 多彩卡片：浅灰底 + 圆角白卡，平台色只用在徽章上 */
 :root {
-  --background: #fafafa;
-  --foreground: #18181b;
+  --background: #f3f3f6;
+  --foreground: #16161a;
+  --panel: #ffffff;
+  --soft: #f3f3f6;
+  --line: #e6e6ec;
+  --muted: #5c5c66;
+  --ink: #16161a;
+  --ink-fg: #ffffff;
+  --warn: #8a5300;
+  --warn-soft: #fff6e0;
+  --bad: #b3261e;
+  --bad-soft: #fdecea;
+  --ok: #13693a;
+  --ok-soft: #e3f6ea;
+  --shadow: 0 1px 2px rgb(22 22 26 / 0.04), 0 4px 16px rgb(22 22 26 / 0.04);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #111114;
+    --foreground: #ececf1;
+    --panel: #1b1b20;
+    --soft: #26262d;
+    --line: #2e2e36;
+    --muted: #a0a0ad;
+    --ink: #ececf1;
+    --ink-fg: #16161a;
+    --warn: #f2b544;
+    --warn-soft: #3a2c12;
+    --bad: #ff8a80;
+    --bad-soft: #3d1c1a;
+    --ok: #6fd3a0;
+    --ok-soft: #173a2a;
+    --shadow: none;
   }
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-panel: var(--panel);
+  --color-soft: var(--soft);
+  --color-line: var(--line);
+  --color-muted: var(--muted);
+  --color-ink: var(--ink);
+  --color-ink-fg: var(--ink-fg);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --shadow-card: var(--shadow);
 }
 
 body {

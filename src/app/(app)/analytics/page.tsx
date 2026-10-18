@@ -44,7 +44,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps<"/analyt
         ].map(([label, value]) => (
           <Card key={label}>
             <div className="text-2xl font-semibold tabular-nums">{Number(value).toLocaleString("zh-CN")}</div>
-            <div className="text-sm text-zinc-500">{label}</div>
+            <div className="text-sm text-muted">{label}</div>
           </Card>
         ))}
       </div>
@@ -54,7 +54,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps<"/analyt
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="text-left text-zinc-500">
+            <thead className="text-left text-muted">
               <tr>
                 <th className="py-2 pr-3">内容</th>
                 <th className="py-2 pr-3">账号</th>
@@ -64,7 +64,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps<"/analyt
                 <th className="py-2 text-right">转发</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+            <tbody className="divide-y divide-line">
               {rows
                 .sort((a, b) => b.latest.views - a.latest.views)
                 .map((r) => (
