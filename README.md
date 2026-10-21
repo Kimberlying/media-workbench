@@ -8,7 +8,7 @@
 
 | 模块 | 做什么 | 代码 |
 | --- | --- | --- |
-| 资讯雷达 | 每天 7 点（北京时间）两路入共享资讯池：8 个固定信源（Product Hunt、r/SideProject、Hacker News、r/LocalLLaMA、GitHub Trending、NodeSeek、阮一峰周刊、Godly，搬自 kim 原来的 `fetch_ai_radar.py`），加 Grok 按账号档案实时搜 X（`x_search`）。入库前去重（14 天同链接、3 天同标题或核心词），并打「利他」「清醒」标签 | `src/lib/radar/`、`src/lib/pipeline/radar.ts` |
+| 资讯雷达 | 每天 7 点（北京时间）两路入共享资讯池：11 个固定信源（Product Hunt、r/SideProject、Hacker News、r/LocalLLaMA、GitHub Trending、NodeSeek、阮一峰周刊、Godly，搬自 kim 原来的 `fetch_ai_radar.py`；X Builders、Builder 播客、官方博客，来自 follow-builders 的公开 feed，接法参考 signal-desk），加 Grok 按账号档案实时搜 X（`x_search`）。入库前去重（14 天同链接、3 天同标题或核心词），并打「利他」「清醒」标签 | `src/lib/radar/`、`src/lib/pipeline/radar.ts` |
 | 今日 3 条与日报 | 资讯入库后，按洞察、实用、产品三个方向各挑一条，给每个 X 账号写成短推草稿（只生成不发）；热度前 5 和这 3 条推到 Discord（`DISCORD_WEBHOOK_URL`）；`/api/digest` 出日报，Mac 上的 `scripts/obsidian_sync.py` 每天拉下来写进 Obsidian | `src/lib/pipeline/daily.ts`、`src/lib/notify/discord.ts`、`scripts/obsidian_sync.py` |
 | 选题策划 | 按账号档案从资讯池筛选题，带热度与相关性评分；可排进周日历 | `src/lib/pipeline/topics.ts` |
 | 文案生成 | 一个选题按所选账号和形式一次出多个版本，套档案语气和知识库 | `src/lib/pipeline/copywriting.ts`、`src/lib/content/formats.ts` |
