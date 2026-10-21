@@ -1,5 +1,13 @@
 // 固定信源：从 kim 原来的 fetch_ai_radar.py 搬过来，抓取不经过模型，链接都是原始链接。
 // Product Hunt / r/SideProject / Hacker News 用 Buzzing 的中文版 JSON Feed。
+// 另加 follow-builders 的三个 feed（X builder 推文、播客、官方博客），见 follow-builders.ts。
+
+import {
+  FOLLOW_BUILDERS_URLS,
+  parseBuilderBlogs,
+  parseBuilderPodcasts,
+  parseBuilderTweets,
+} from "@/lib/radar/follow-builders";
 
 export interface FeedItem {
   source: string;
@@ -199,6 +207,30 @@ export const FEEDS: FeedSource[] = [
     async fetch(f) {
       const xml = await f("https://godly.website/feed.xml");
       return xml ? parseRss(xml, "Godly", 2, 200) : [];
+    },
+  },
+  {
+    id: "builders-x",
+    label: "X Builders",
+    async fetch(f) {
+      const json = await f(FOLLOW_BUILDERS_URLS.x);
+      return json ? parseBuilderTweets(json, 6) : [];
+    },
+  },
+  {
+    id: "builders-podcasts",
+    label: "Builder 播客",
+    async fetch(f) {
+      const json = await f(FOLLOW_BUILDERS_URLS.podcasts);
+      return json ? parseBuilderPodcasts(json, 2, 300) : [];
+    },
+  },
+  {
+    id: "builders-blogs",
+    label: "官方博客",
+    async fetch(f) {
+      const json = await f(FOLLOW_BUILDERS_URLS.blogs);
+      return json ? parseBuilderBlogs(json, 3, 400) : [];
     },
   },
 ];
