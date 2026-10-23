@@ -4,6 +4,7 @@
 export const STEPS = [
   "radar.x", // 资讯雷达：X 热点（Grok 实时搜 X）
   "radar.tag", // 资讯入库打标签与摘要
+  "source.digest", // 素材：视频、播客文字稿整理成摘要、章节、金句和拆解
   "topics.plan", // 选题策划
   "copy.post", // 多平台文案
   "copy.x_post", // X 短推（含素材润色、翻译）
@@ -18,6 +19,7 @@ export type Step = (typeof STEPS)[number];
 const DEFAULT_MODELS: Record<Step, string> = {
   "radar.x": "grok",
   "radar.tag": "gemini-flash",
+  "source.digest": "gemini-flash",
   "topics.plan": "gemini-flash",
   "copy.post": "gemini-flash",
   "copy.x_post": "grok",

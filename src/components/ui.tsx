@@ -27,6 +27,8 @@ const PLATFORM_BADGE: Record<Platform, { label: string; mark: string; dot: strin
   wechat: { label: "公众号", mark: "公", dot: "bg-[#07c160]", chip: "bg-[#e2f7ea] text-[#0a7a3b] dark:bg-[#133a24] dark:text-[#6fd99a]" },
   linkedin: { label: "LinkedIn", mark: "in", dot: "bg-[#0a66c2]", chip: "bg-[#e3effb] text-[#0a4f94] dark:bg-[#142a44] dark:text-[#7db8f0]" },
   instagram: { label: "Instagram", mark: "IG", dot: "bg-[#d62976]", chip: "bg-[#fce6f1] text-[#a3195b] dark:bg-[#3a1730] dark:text-[#f08bc8]" },
+  zhihu: { label: "知乎", mark: "知", dot: "bg-[#0066ff]", chip: "bg-[#e5efff] text-[#0050c8] dark:bg-[#142446] dark:text-[#8ab4ff]" },
+  threads: { label: "Threads", mark: "@", dot: "bg-black dark:bg-white dark:text-black", chip: "bg-soft text-foreground" },
   facebook: { label: "Facebook", mark: "f", dot: "bg-[#1877f2]", chip: "bg-[#e7f0fe] text-[#1457b8] dark:bg-[#16284a] dark:text-[#8ab4ff]" },
 };
 

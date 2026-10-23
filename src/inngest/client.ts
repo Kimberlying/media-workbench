@@ -6,4 +6,5 @@ export const inngest = new Inngest({ id: "media-workbench" });
 export const EVENTS = {
   topicsRequested: "topics/plan.requested",
   contentsRequested: "contents/generate.requested",
+  sourceRequested: "sources/transcribe.requested",
 } as const;
