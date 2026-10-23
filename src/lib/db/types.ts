@@ -5,7 +5,15 @@ import type { ContentPack } from "@/lib/xhs/schema";
 
 export type MemberRole = "owner" | "editor" | "reviewer" | "client_viewer";
 
-export type Platform = "x" | "instagram" | "facebook" | "linkedin" | "xiaohongshu" | "wechat";
+export type Platform =
+  | "x"
+  | "instagram"
+  | "facebook"
+  | "linkedin"
+  | "xiaohongshu"
+  | "wechat"
+  | "zhihu"
+  | "threads";
 
 export type TopicStatus = "candidate" | "selected" | "scheduled" | "used" | "discarded";
 

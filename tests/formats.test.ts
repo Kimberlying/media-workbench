@@ -6,6 +6,8 @@ describe("内容形式", () => {
   it("X 有短推、推文串和长文三种形式，短推排第一", () => {
     expect(formatsFor("x").map((f) => f.id)).toEqual(["x.post", "x.thread", "x.article"]);
     expect(formatsFor("wechat").map((f) => f.id)).toEqual(["wechat.article"]);
+    expect(formatsFor("zhihu").map((f) => [f.id, f.kind, f.apiPublish])).toEqual([["zhihu.answer", "longform", false]]);
+    expect(formatsFor("threads").map((f) => [f.id, f.kind, f.apiPublish])).toEqual([["threads.post", "text", false]]);
   });
 
   it("variant 和形式可以互相换算", () => {

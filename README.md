@@ -14,7 +14,8 @@
 | 选题策划 | 按账号档案从资讯池筛选题，带热度与相关性评分；可排进周日历 | `src/lib/pipeline/topics.ts` |
 | 文案生成 | 一个选题按所选账号和形式一次出多个版本，套档案语气和知识库 | `src/lib/pipeline/copywriting.ts`、`src/lib/content/formats.ts` |
 | X 短推 | 从选题生成，或把一段素材「润色」「翻译」成一条短推；不超过 250 字、无 emoji、不以问号结尾、不加互动引导，可选模型、可重出。规则沿用 [tweet-buffer-workflow](https://github.com/Kimberlying/tweet-buffer-workflow) | `src/lib/content/x-post.ts`、`src/app/(app)/contents/rewrite-form.tsx` |
-| 长文 | X 长文；公众号长文由同一篇 X 长文改写，并配 3–6 张横版贴图 | `src/lib/xhs/prompts.ts` |
+| 长文 | X 长文；公众号长文由同一篇 X 长文改写，并配 3–6 张横版贴图；知乎回答（第一行是读者会搜的问题） | `src/lib/xhs/prompts.ts` |
+| Threads 帖子 | 500 字符以内、口语化，最多 1 个话题标签；和知乎一样生成后人工发 | `src/lib/content/formats.ts` |
 | 小红书内容包 | brief → 8–12 张知识卡 → 标题、正文、标签、检查，结构沿用 [build-xhs-content-pack](https://github.com/Kimberlying/build-xhs-content-pack) | `src/lib/xhs/` |
 | 卡片出图（二期第一项） | 小红书卡片和公众号贴图在工作台里直接出 PNG：「内容」页可预览，下载的发布包里带好 `images/`。四套风格、六种版式移植自 build-xhs-content-pack 的 `render_cards.py` | `src/lib/cards/` |
 | 知识库（简版） | 语气指南、禁用词、历史爆款等，生成时自动带上 | `src/app/(app)/knowledge` |

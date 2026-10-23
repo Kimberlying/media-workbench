@@ -87,7 +87,7 @@ export interface Target {
   format: FormatSpec;
 }
 
-const ORDER: Record<string, number> = { "x.article": 0, "wechat.article": 1, "xiaohongshu.pack": 2 };
+const ORDER: Record<string, number> = { "x.article": 0, "wechat.article": 1, "zhihu.answer": 2, "xiaohongshu.pack": 3 };
 
 /** 长文先写：公众号长文由 X 长文改写，小红书内容包以长文为素材拆卡 */
 export function orderTargets(targets: Target[]): Target[] {

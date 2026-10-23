@@ -32,7 +32,7 @@ function list(raw: FormDataEntryValue | null): string[] {
 // 账号与档案
 // ---------------------------------------------------------------------------
 
-const PLATFORMS: Platform[] = ["x", "instagram", "facebook", "linkedin", "xiaohongshu", "wechat"];
+const PLATFORMS: Platform[] = ["x", "instagram", "facebook", "linkedin", "xiaohongshu", "wechat", "zhihu", "threads"];
 
 export async function addManualAccount(formData: FormData) {
   const { supabase, org, workspace } = await requireSession();
