@@ -15,6 +15,8 @@ import type { ContentStatus, KnowledgeType, Platform } from "@/lib/db/types";
 import { weekStart } from "@/lib/dates";
 import { loadKnowledge } from "@/lib/pipeline/copywriting";
 import { requireSession } from "@/lib/session";
+import { detectPlatform, normalizeSourceUrl, SUPPORTED_HINT } from "@/lib/sources/platforms";
+import type { SourceDigest } from "@/lib/sources/schema";
 import { EVENTS, inngest } from "@/inngest/client";
 
 // 所有写操作都用当前用户身份执行，RLS 保证只能动自己组织的数据。
@@ -159,6 +161,107 @@ export async function requestContents(topicId: string, formData: FormData) {
   await inngest.send({ name: EVENTS.contentsRequested, data: { topicId, targets } });
   await supabase.from("topics").update({ status: "selected" }).eq("id", topicId);
   revalidatePath("/topics");
+}
+
+// ---------------------------------------------------------------------------
+// 素材（链接转写）
+// ---------------------------------------------------------------------------
+
+export async function createSource(formData: FormData) {
+  const { supabase, org, workspace, user } = await requireSession();
+  const url = normalizeSourceUrl(String(formData.get("url") ?? ""));
+  if (!url) redirect(`/sources?error=${encodeURIComponent(`这个链接转不了。${SUPPORTED_HINT}`)}`);
+  const mode = formData.get("mode") === "native" ? "native" : "auto";
+
+  // 同一个链接转过（或正在转）就直接打开，不重复扣积分
+  const { data: existing } = await supabase
+    .from("sources")
+    .select("id")
+    .eq("url", url)
+    .neq("status", "failed")
+    .limit(1)
+    .maybeSingle();
+  if (existing) redirect(`/sources?id=${existing.id}`);
+
+  const { data, error } = await supabase
+    .from("sources")
+    .insert({
+      org_id: org.id,
+      workspace_id: workspace.id,
+      url,
+      platform: detectPlatform(url),
+      mode,
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
+  if (error) redirect(`/sources?error=${encodeURIComponent(error.message)}`);
+  await inngest.send({ name: EVENTS.sourceRequested, data: { sourceId: data.id } });
+  redirect(`/sources?id=${data.id}`);
+}
+
+export async function retrySource(sourceId: string, formData: FormData) {
+  const { supabase } = await requireSession();
+  const patch: Record<string, unknown> = { status: "pending", error: null };
+  if (formData.get("mode") === "auto") patch.mode = "auto";
+  const { data } = await supabase
+    .from("sources")
+    .update(patch)
+    .eq("id", sourceId)
+    .eq("status", "failed")
+    .select("id")
+    .maybeSingle();
+  if (data) await inngest.send({ name: EVENTS.sourceRequested, data: { sourceId } });
+  revalidatePath("/sources");
+}
+
+export async function deleteSource(sourceId: string) {
+  const { supabase } = await requireSession();
+  await supabase.from("sources").delete().eq("id", sourceId);
+  redirect("/sources");
+}
+
+/** 素材 → 选题 → 多平台文案：选一个切入角度和要写的账号、形式，后台按「生成文案」同一套流程写，素材带进提示词 */
+export async function writeFromSource(sourceId: string, formData: FormData) {
+  const { supabase, org } = await requireSession();
+  const { data: source, error } = await supabase
+    .from("sources")
+    .select("id, title, digest")
+    .eq("id", sourceId)
+    .eq("status", "ready")
+    .single();
+  if (error) throw new Error("素材还没整理好");
+
+  const digest = source.digest as SourceDigest;
+  const pick = String(formData.get("angle") ?? "0");
+  const custom = { title: String(formData.get("custom_title") ?? "").trim(), angle: String(formData.get("custom_angle") ?? "").trim() };
+  const chosen =
+    pick === "custom" && custom.title ? custom : (digest.angles[Number(pick)] ?? { title: digest.title || source.title, angle: "" });
+
+  const targets = formData
+    .getAll("targets")
+    .map(String)
+    .map((v) => {
+      const [accountId, format] = v.split("|");
+      return { accountId, format: getFormat(format).id };
+    });
+  if (targets.length === 0) redirect(`/sources?id=${sourceId}&error=${encodeURIComponent("至少勾一个要写的账号和形式")}`);
+
+  const { data: topic, error: topicError } = await supabase
+    .from("topics")
+    .insert({
+      org_id: org.id,
+      account_id: targets[0].accountId,
+      source_id: sourceId,
+      title: chosen.title,
+      angle: chosen.angle,
+      status: "selected",
+    })
+    .select("id")
+    .single();
+  if (topicError) throw new Error(topicError.message);
+  await inngest.send({ name: EVENTS.contentsRequested, data: { topicId: topic.id, targets } });
+  redirect(`/sources?id=${sourceId}&sent=${targets.length}`);
 }
 
 // ---------------------------------------------------------------------------
