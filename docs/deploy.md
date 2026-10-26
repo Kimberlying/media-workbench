@@ -26,7 +26,7 @@
 - xAI：console.x.ai → API Keys 新建，充值少量额度。资讯雷达搜 X 按抓到的帖子计费，每千条 5 美元，另加 token 费（grok-4.7 输入 2 / 输出 6 美元每百万 token）。
 - Gemini：aistudio.google.com → Get API key，绑定结算账号走付费档（免费档会拿数据训练，且限速）。
 
-- Supadata（「素材」页转写用）：dash.supadata.ai 注册，引导流程里会自动生成 API key，填进 `SUPADATA_API_KEY`。免费档每月 100 积分：有字幕的视频 1 积分一条，没字幕用 AI 转写每分钟 2 积分（一小时的播客 120 积分），元数据另 1 积分；常用的话升 Basic（每月 300 积分）。youtube-article 插件用的是同一家，可以共用一个 key。
+- Supadata（「素材」页转写用）：dash.supadata.ai 注册，引导流程里会自动生成 API key，填进 `SUPADATA_API_KEY`。免费档每月 100 积分：有字幕的视频 1 积分一条，没字幕用 AI 转写每分钟 2 积分（一小时的播客 120 积分），元数据另 1 积分；常用的话升 Basic（每月 300 积分）。youtube-article 插件用的是同一家，可以共用一个 key。上传本地文件用的存储桶 `sources` 由迁移建好，不用手动建；单个文件上限 50MB 是 Supabase 免费档的限制，升 Pro 后可以调大。
 
 拿到 key 后在本地先核对一遍：把 key 填进 `.env.local`，运行 `npm run check:models`。它会真调一次 Grok、Gemini 的 JSON 模式和 Grok 的 `x_search`，花几分钱。
 

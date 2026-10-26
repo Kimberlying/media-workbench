@@ -114,6 +114,8 @@ export interface Source {
   duration_seconds: number | null;
   lang: string | null;
   mode: "auto" | "native";
+  /** 上传的本地文件在 Storage 桶 sources 里的路径；贴链接的为空 */
+  storage_path: string | null;
   status: SourceStatus;
   error: string | null;
   transcript: TranscriptSegment[] | null;
