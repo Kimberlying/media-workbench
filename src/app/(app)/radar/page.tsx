@@ -1,6 +1,14 @@
 import { Empty, PageHeader } from "@/components/ui";
 import type { NewsItem } from "@/lib/db/types";
+import { detectPlatform } from "@/lib/sources/platforms";
 import { requireSession } from "@/lib/session";
+import { createSource } from "../actions";
+
+/** 雷达里能直接转写的：视频平台的链接（X 帖子大多不是视频，不放按钮） */
+function transcribable(url: string): boolean {
+  const platform = detectPlatform(url);
+  return platform !== null && platform !== "x";
+}
 
 export default async function RadarPage({ searchParams }: PageProps<"/radar">) {
   const { supabase } = await requireSession();
@@ -39,6 +47,12 @@ export default async function RadarPage({ searchParams }: PageProps<"/radar">) {
                     {t}
                   </a>
                 ))}
+                {transcribable(n.url) ? (
+                  <form action={createSource}>
+                    <input type="hidden" name="url" value={n.url} />
+                    <button className="rounded-full bg-ink px-2 text-ink-fg hover:opacity-85">转写</button>
+                  </form>
+                ) : null}
               </div>
             </li>
           ))}

@@ -5,6 +5,7 @@ import { checkXPost, finishXPost } from "@/lib/content/x-post";
 import type { Account, AccountProfile, Topic } from "@/lib/db/types";
 import type { ChatMessage, LlmGateway } from "@/lib/llm";
 import { modelFor } from "@/lib/llm/models";
+import { sourceMaterial } from "@/lib/sources/digest";
 import { checkBodyRepeatsCards, checkCards, checkRiskyClaims } from "@/lib/xhs/checks";
 import { buildWechatGraphicsPrompt, buildXhsPackPrompt, wechatAdaptation } from "@/lib/xhs/prompts";
 import {
@@ -19,6 +20,7 @@ import {
 
 // 文案生成：一个选题按目标账号和内容形式一次出多个版本，套账号档案的语气和知识库。
 // 长文先写；公众号长文由 X 长文改写，小红书内容包以长文为素材拆卡（结构沿用 build-xhs-content-pack）。
+// 从素材（视频、播客转写）出的选题，把素材的整理结果带进提示词；长文和小红书再带一段文字稿。
 // 生成后立刻跑一期的合规检查（禁用词）：命中则停在草稿并带上命中词，未命中进入合规检查通过后的下一步。
 
 export interface KnowledgeContext {
@@ -85,7 +87,7 @@ export interface Target {
   format: FormatSpec;
 }
 
-const ORDER: Record<string, number> = { "x.article": 0, "wechat.article": 1, "xiaohongshu.pack": 2 };
+const ORDER: Record<string, number> = { "x.article": 0, "wechat.article": 1, "zhihu.answer": 2, "xiaohongshu.pack": 3 };
 
 /** 长文先写：公众号长文由 X 长文改写，小红书内容包以长文为素材拆卡 */
 export function orderTargets(targets: Target[]): Target[] {
@@ -117,12 +119,36 @@ interface Generated {
   text: string[];
 }
 
+/** 素材带进提示词的两档：short 只有整理结果，long 再加一段文字稿 */
+export interface Material {
+  short: string;
+  long: string;
+}
+
+const NO_MATERIAL: Material = { short: "", long: "" };
+
+/** 长文和小红书最多带这么多字的文字稿，约一小时的访谈 */
+const MATERIAL_TRANSCRIPT_CHARS = 60_000;
+
+export async function loadMaterial(db: SupabaseClient, sourceId: string | null | undefined): Promise<Material> {
+  if (!sourceId) return NO_MATERIAL;
+  const { data, error } = await db
+    .from("sources")
+    .select("url, title, author, digest, transcript")
+    .eq("id", sourceId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data?.digest) return NO_MATERIAL;
+  return { short: sourceMaterial(data), long: sourceMaterial(data, MATERIAL_TRANSCRIPT_CHARS) };
+}
+
 async function generateOne(
   llm: LlmGateway,
   topic: Topic,
   target: Target,
   knowledge: KnowledgeContext,
   longformSource: { id: string; body: string } | undefined,
+  material: Material,
 ): Promise<Generated> {
   const { account, profile, format } = target;
   const taboo = [...profile.taboo, ...knowledge.tabooWords];
@@ -132,7 +158,7 @@ async function generateOne(
     const raw = await llm.generate({
       ...base,
       step: format.step,
-      messages: buildCopyPrompt(topic, account, profile, knowledge, format),
+      messages: buildCopyPrompt(topic, account, profile, knowledge, format, material.short),
     });
     if (format.id !== "x.post") return { body: raw, pack: null, text: [raw] };
     const body = finishXPost(raw);
@@ -144,10 +170,11 @@ async function generateOne(
   }
 
   if (format.kind === "longform") {
+    // 公众号由 X 长文改写时，细节以 X 长文为准，素材只带整理结果
     const adapt =
       format.id === "wechat.article" && longformSource?.id === "x.article"
-        ? wechatAdaptation(longformSource.body)
-        : "";
+        ? material.short + wechatAdaptation(longformSource.body)
+        : material.long;
     const body = await llm.generate({
       ...base,
       step: format.step,
@@ -189,6 +216,7 @@ async function generateOne(
       topicTitle: topic.title,
       angle: topic.angle,
       source: longformSource?.body,
+      material: longformSource ? material.short : material.long,
     }),
   });
   const cards: CardsFile = {
@@ -224,11 +252,12 @@ export async function generateContents(
 ): Promise<string[]> {
   const ids: string[] = [];
   let longformSource: { id: string; body: string } | undefined;
+  const material = await loadMaterial(db, topic.source_id);
 
   for (const target of orderTargets(targets)) {
     const { account, profile, format } = target;
     const knowledge = await loadKnowledge(db, account.workspace_id);
-    const generated = await generateOne(llm, topic, target, knowledge, longformSource);
+    const generated = await generateOne(llm, topic, target, knowledge, longformSource, material);
     if (format.kind === "longform" && !longformSource) {
       longformSource = { id: format.id, body: generated.body };
     }

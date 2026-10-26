@@ -30,6 +30,8 @@ export function buildXhsPackPrompt(input: {
   angle: string;
   /** 已经写好的长文（X 长文或公众号长文），有的话以它为素材 */
   source?: string;
+  /** 选题来自视频、播客时的素材整理（见 src/lib/sources/digest.ts 的 sourceMaterial） */
+  material?: string;
 }): ChatMessage[] {
   const themes = Object.entries(THEMES)
     .map(([id, desc]) => `- ${id}：${desc}`)
@@ -53,7 +55,8 @@ export function buildXhsPackPrompt(input: {
       role: "user",
       content:
         `选题：${input.topicTitle}\n切入角度：${input.angle}` +
-        (input.source ? `\n\n素材（同一选题已写好的长文，拆卡时以它为准，不要机械切段）：\n${input.source}` : ""),
+        (input.source ? `\n\n素材（同一选题已写好的长文，拆卡时以它为准，不要机械切段）：\n${input.source}` : "") +
+        (input.material ?? ""),
     },
   ];
 }

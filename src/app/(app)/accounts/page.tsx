@@ -10,6 +10,8 @@ const PLATFORM_LABELS = {
   linkedin: "LinkedIn",
   xiaohongshu: "小红书",
   wechat: "公众号",
+  zhihu: "知乎",
+  threads: "Threads",
 } as const;
 
 export default async function AccountsPage({ searchParams }: PageProps<"/accounts">) {

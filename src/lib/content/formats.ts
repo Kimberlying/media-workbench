@@ -84,6 +84,20 @@ export const FORMATS: FormatSpec[] = [
       "语气比 X 更完整、更有过渡；段落短，适合手机阅读。",
   },
   {
+    id: "zhihu.answer",
+    platform: "zhihu",
+    format: "answer",
+    label: "知乎回答",
+    kind: "longform",
+    step: "copy.longform",
+    // 知乎没有开放发布接口，生成发布包人工发
+    apiPublish: false,
+    guide:
+      "写一篇知乎回答，1500–3000 字。第一行用「# 问题」写一个读者真的会在知乎搜的问题，正文是对它的回答：" +
+      "开头两三句直接给结论，再分 3–5 个小节（用 ## 二级标题）讲理由、例子和亲身判断，引用的数据和说法注明来源，" +
+      "结尾给出适合谁、不适合谁。语气像懂行的人认真回答，不写营销腔，不用「谢邀」。",
+  },
+  {
     id: "xiaohongshu.pack",
     platform: "xiaohongshu",
     format: "pack",
@@ -112,6 +126,18 @@ export const FORMATS: FormatSpec[] = [
     step: "copy.post",
     apiPublish: false,
     guide: "写一条 Facebook 主页帖子，200–400 字，口语化，结尾一个互动问题。",
+  },
+  {
+    id: "threads.post",
+    platform: "threads",
+    format: "post",
+    label: "Threads 帖子",
+    kind: "text",
+    step: "copy.post",
+    apiPublish: false,
+    guide:
+      "写一条 Threads 帖子，不超过 500 个字符，口语化、像跟朋友聊天，1–3 个短段落，第一句就说重点；" +
+      "最多 1 个话题标签，不用引导互动的套话。",
   },
   {
     id: "linkedin.post",
