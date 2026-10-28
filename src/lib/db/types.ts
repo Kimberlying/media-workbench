@@ -13,7 +13,8 @@ export type Platform =
   | "xiaohongshu"
   | "wechat"
   | "zhihu"
-  | "threads";
+  | "threads"
+  | "substack";
 
 export type TopicStatus = "candidate" | "selected" | "scheduled" | "used" | "discarded";
 

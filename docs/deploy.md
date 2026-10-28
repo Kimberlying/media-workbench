@@ -1,5 +1,7 @@
 # 上线步骤
 
+只想先跑通「Telegram 发语音或文字 → X、Substack、LinkedIn」这条线，看 [quickstart-telegram.md](quickstart-telegram.md)，比这里的完整步骤少一半。
+
 线上由四样东西组成，都有免费档，自用的量用不满：
 
 | 服务 | 做什么 |
@@ -60,10 +62,12 @@
    curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
      -d url=https://<线上域名>/api/telegram/webhook \
      -d secret_token=<TELEGRAM_WEBHOOK_SECRET> \
-     -d 'allowed_updates=["callback_query"]'
+     -d 'allowed_updates=["message","callback_query"]'
    ```
 
    一个机器人只能有一个 webhook。Mac 上的旧脚本如果还在用同一个机器人收消息，就另建一个机器人给工作台用。
+
+也可以直接给机器人发文字或语音：会写成 X 中文短推、Substack 英文长文、LinkedIn 英文帖发回 TG 审核，详见 [quickstart-telegram.md](quickstart-telegram.md)。
 
 用法：内容批准后，「内容」页的「已批准」里有「交给 Buffer」四个按钮（存草稿 / 进入队列 / 队列置顶 / 现在发送），或者点「推到 Telegram」，在 TG 里点同样的按钮；「现在发送」在 TG 里要再点一次确认。Instagram 要先填至少一张图片地址（公开的 https 链接，Buffer 不收文件上传）。交给 Buffer 时如果中断、结果不确定，工作台不会重发，会提示你到 Buffer 核对。
 

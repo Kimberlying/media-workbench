@@ -36,7 +36,7 @@ function list(raw: FormDataEntryValue | null): string[] {
 // 账号与档案
 // ---------------------------------------------------------------------------
 
-const PLATFORMS: Platform[] = ["x", "instagram", "facebook", "linkedin", "xiaohongshu", "wechat", "zhihu", "threads"];
+const PLATFORMS: Platform[] = ["x", "instagram", "facebook", "linkedin", "xiaohongshu", "wechat", "zhihu", "threads", "substack"];
 
 export async function addManualAccount(formData: FormData) {
   const { supabase, org, workspace } = await requireSession();
@@ -51,6 +51,60 @@ export async function addManualAccount(formData: FormData) {
     handle,
   });
   if (error) redirect(`/accounts?error=${encodeURIComponent(error.message)}`);
+  revalidatePath("/accounts");
+}
+
+// 技术博主模板（building in public）：X 中文短推、Substack 英文长文、LinkedIn 英文帖。
+// 已经有这个平台账号的跳过；档案之后在本页随时改。
+const CREATOR_TEMPLATE: { platform: Platform; field: string; language: string; positioning: string; tone: string }[] = [
+  {
+    platform: "x",
+    field: "x_handle",
+    language: "zh-CN",
+    positioning: "技术创作者，building in public：记录自己做 AI 产品和工程的过程、判断和踩坑",
+    tone: "真诚、具体、像工程师跟同行聊天；有观点但不说满，不用营销腔",
+  },
+  {
+    platform: "substack",
+    field: "substack_handle",
+    language: "en",
+    positioning: "A builder's newsletter: what I'm building with AI, the decisions behind it, and what I learned",
+    tone: "First person, honest and concrete; explain trade-offs and show the work; no hype",
+  },
+  {
+    platform: "linkedin",
+    field: "linkedin_handle",
+    language: "en",
+    positioning: "Technical builder sharing hands-on AI engineering work in public",
+    tone: "Professional but personal; lead with the insight, back it with specifics; no buzzwords",
+  },
+];
+
+export async function setupCreatorTemplate(formData: FormData) {
+  const { supabase, org, workspace } = await requireSession();
+  const { data: existing } = await supabase.from("accounts").select("platform").eq("workspace_id", workspace.id);
+  const have = new Set((existing ?? []).map((a) => a.platform as string));
+  const audience = String(formData.get("audience") ?? "").trim() || "做 AI 产品的工程师、技术负责人和招聘方 / AI builders, engineers and hiring managers";
+
+  for (const t of CREATOR_TEMPLATE) {
+    if (have.has(t.platform)) continue;
+    const handle = String(formData.get(t.field) ?? "").replace(/^@/, "").trim();
+    if (!handle) continue;
+    const { data: profile, error } = await supabase
+      .from("account_profiles")
+      .insert({ org_id: org.id, positioning: t.positioning, audience, tone: t.tone, language: t.language })
+      .select("id")
+      .single();
+    if (error) redirect(`/accounts?error=${encodeURIComponent(error.message)}`);
+    const { error: accountError } = await supabase.from("accounts").insert({
+      org_id: org.id,
+      workspace_id: workspace.id,
+      platform: t.platform,
+      handle,
+      profile_id: profile.id,
+    });
+    if (accountError) redirect(`/accounts?error=${encodeURIComponent(accountError.message)}`);
+  }
   revalidatePath("/accounts");
 }
 
@@ -213,9 +267,14 @@ export async function retrySource(sourceId: string, formData: FormData) {
     .update(patch)
     .eq("id", sourceId)
     .eq("status", "failed")
-    .select("id")
+    .select("id, platform, transcript")
     .maybeSingle();
-  if (data) await inngest.send({ name: EVENTS.sourceRequested, data: { sourceId } });
+  if (data?.platform === "telegram") {
+    // Telegram 笔记：已经有文字的从整理重来；语音没转出来的只能在 TG 里重发
+    if (data.transcript) await inngest.send({ name: EVENTS.telegramNote, data: { sourceId } });
+  } else if (data) {
+    await inngest.send({ name: EVENTS.sourceRequested, data: { sourceId } });
+  }
   revalidatePath("/sources");
 }
 

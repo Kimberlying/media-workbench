@@ -140,6 +140,21 @@ export const FORMATS: FormatSpec[] = [
       "最多 1 个话题标签，不用引导互动的套话。",
   },
   {
+    id: "substack.article",
+    platform: "substack",
+    format: "article",
+    label: "Substack 长文",
+    kind: "longform",
+    step: "copy.longform",
+    // Substack 没有发布接口，生成复制包人工贴进编辑器
+    apiPublish: false,
+    guide:
+      "写一篇 Substack newsletter 长文，英文 1200–2000 词（中文 2500–4000 字）。" +
+      "第一人称，像作者在跟订阅者讲自己正在做的事：开头一段讲清这期要说什么、为什么现在值得说，" +
+      "正文分 3–5 个小节（用 ## 二级标题），讲做法、取舍、踩过的坑和具体细节（工具、数字、代码思路），" +
+      "结尾写学到了什么、下一步做什么。不写营销腔，不编造没做过的事和结果。",
+  },
+  {
     id: "linkedin.post",
     platform: "linkedin",
     format: "post",
@@ -147,7 +162,9 @@ export const FORMATS: FormatSpec[] = [
     kind: "text",
     step: "copy.post",
     apiPublish: false,
-    guide: "写一条 LinkedIn 帖子，300–600 字，专业但不生硬，分段清楚，结尾 3 个话题标签。",
+    guide:
+      "写一条 LinkedIn 帖子，英文 150–300 词（中文 300–600 字），专业但不生硬，分段清楚。" +
+      "第一行就说结论或一个具体的问题；技术内容讲清做了什么、为什么这样做、结果如何；结尾 3 个话题标签。",
   },
 ];
 

@@ -20,6 +20,7 @@
 | 卡片出图（二期第一项） | 小红书卡片和公众号贴图在工作台里直接出 PNG：「内容」页可预览，下载的发布包里带好 `images/`。四套风格、六种版式移植自 build-xhs-content-pack 的 `render_cards.py` | `src/lib/cards/` |
 | 知识库（简版） | 语气指南、禁用词、历史爆款等，生成时自动带上 | `src/app/(app)/knowledge` |
 | 合规（一期） | 禁用词检查，命中则留在草稿并标出命中词 | `src/lib/content/compliance.ts` |
+| Telegram 输入（技术博主线） | 给机器人发文字或语音 → Gemini 转写 → 整理观点 → 写 X 中文短推、Substack 英文长文、LinkedIn 英文帖 → 逐条推回 TG 审核：X、LinkedIn 点按钮交给 Buffer，Substack 发复制包；回复某条即可改。上手见 [docs/quickstart-telegram.md](docs/quickstart-telegram.md) | `src/lib/pipeline/telegram.ts`、`src/app/api/telegram/webhook` |
 | 经 Buffer 发布 | LinkedIn、Instagram（也可以给任意账号配）交给 Buffer：工作台里点「存草稿 / 进入队列 / 队列置顶 / 现在发送」，或先推到 Telegram 在 TG 里点；动作和防重发规则沿用 tweet-buffer-workflow | `src/lib/buffer/`、`src/lib/telegram/`、`src/app/api/telegram/webhook` |
 | 发布排期 | X 短推和推文串走 API 定时发；发布结果不确定时不自动重发，在「内容」页人工核对后登记；X 长文、公众号、小红书等生成发布包（zip），人工发后登记 | `src/lib/connectors/`、`src/app/api/contents/[id]/pack` |
 | 数据复盘 | 每天 3 点拉 X 帖子数据，按 7 / 30 天汇总 | `src/lib/pipeline/publish.ts`、`src/app/(app)/analytics` |
