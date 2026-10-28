@@ -1,10 +1,11 @@
 # 最快跑通：Telegram → X、Substack、LinkedIn
 
-这条线：给 Telegram 机器人发一段文字或语音 → 工作台转写、整理观点 → 写成 **X 中文短推**、**Substack 英文长文**、**LinkedIn 英文帖** → 三条逐条发回 TG 给你审：
+这条线：给 Telegram 机器人发一段文字或语音 → 工作台转写、整理观点 → 写成 **X 中文短推**、**Substack 英文长文**、**LinkedIn 英文帖**，再用 Gemini 出一张共用的配图 → 三条逐条发回 TG 给你审（图先发）：
 
 - X 和 LinkedIn：消息下面有「存草稿 / 进入队列 / 队列置顶 / 现在发送」，点了就交给 Buffer（现在发送要再点一次确认）。
 - 要改：直接回复那条消息，发改好的全文，会重新发一条给你审。
-- Substack：发的是复制包（第一行是标题），复制贴进 Substack 编辑器发布，再点「已手动发布」。Substack 没有发布接口，只能这样。
+- Substack：发的是复制包（第一行是标题，下面附封面图链接），复制贴进 Substack 编辑器发布，再点「已手动发布」。Substack 没有发布接口，只能这样。
+- 配图：X 和 LinkedIn 交给 Buffer 时自动带上。图出不来不影响发稿，机器人会说一声。不想要图就加环境变量 `GEMINI_IMAGE_MODEL=off`。
 
 资讯雷达、小红书、公众号、Discord、X 开发者 App 都不用配。
 
@@ -13,7 +14,7 @@
 | 东西 | 去哪拿 | 环境变量 |
 | --- | --- | --- |
 | Supabase 项目 | supabase.com 新建项目，按文件名顺序跑 `supabase/migrations/` 里全部 SQL | `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`、`SUPABASE_SERVICE_ROLE_KEY` |
-| Gemini key（付费档） | aistudio.google.com → Get API key，绑结算账号。转写语音、整理笔记、写 X、Substack、LinkedIn 都用它，只要这一个模型 key | `GEMINI_API_KEY` |
+| Gemini key（付费档） | aistudio.google.com → Get API key，绑结算账号。转写语音、整理笔记、写 X、Substack、LinkedIn、出配图都用它，只要这一个模型 key | `GEMINI_API_KEY` |
 | Buffer API key | Buffer 里连好 X 和 LinkedIn 频道，Settings → API 生成个人 key | `BUFFER_API_KEY` |
 | Telegram 机器人 | Telegram 找 @BotFather 发 `/newbot`，拿到 token；再给 @userinfobot 发条消息拿到你的 chat id | `TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID` |
 | Vercel + Inngest | vercel.com 用 GitHub 登录导入 `Kimberlying/media-workbench`；项目 Integrations 里加 Inngest，它自动填两个 key | `INNGEST_EVENT_KEY`、`INNGEST_SIGNING_KEY` |
@@ -22,7 +23,7 @@
 
 ## 步骤
 
-1. **Supabase**：建项目、跑 SQL。Authentication → URL Configuration 里 Site URL 填 Vercel 域名，Redirect URLs 加 `https://<域名>/auth/callback`。
+1. **Supabase**：建项目、跑 SQL（里面会建一个公开的 `media` 存储桶放配图）。Authentication → URL Configuration 里 Site URL 填 Vercel 域名，Redirect URLs 加 `https://<域名>/auth/callback`。
 2. **Vercel**：导入仓库，Settings → Environment Variables 按上表填好，Deployments 里 Redeploy。
 3. **Inngest**：Vercel 项目 → Integrations → Inngest → Add。Inngest 控制台里能看到 `telegram-note` 函数就对了。
 4. **设 webhook**（终端跑一次）：

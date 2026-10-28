@@ -7,6 +7,7 @@ import { collectInterests, fetchFeeds, fetchNews, fromGrok, RADAR_SOURCES, saveN
 import { loadDigest, writeDailyPosts } from "@/lib/pipeline/daily";
 import { planTopicsForAccount } from "@/lib/pipeline/topics";
 import { planNote, sendReviews, transcribeNote } from "@/lib/pipeline/telegram";
+import { illustrate } from "@/lib/media/image";
 import { requireEnv } from "@/lib/env";
 import { TelegramBot } from "@/lib/telegram/bot";
 import {
@@ -239,6 +240,20 @@ export const telegramNote = inngest.createFunction(
     await step.run("mark-topic-used", async () => {
       await db.from("topics").update({ status: "used" }).eq("id", plan.topic.id);
     });
+    // 配图出不来不影响发稿：记下原因，稿子照样推回去
+    const imageModel = process.env.GEMINI_IMAGE_MODEL;
+    const image = await step.run("illustrate", async () => {
+      if (imageModel === "off") return { url: null, error: null };
+      try {
+        const url = await illustrate(db, ids, { apiKey: requireEnv("GEMINI_API_KEY"), model: imageModel });
+        return { url, error: null };
+      } catch (err) {
+        return { url: null, error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+    if (image.error) {
+      await step.run("image-failed", () => telegramBot().send(`配图没出来，稿子照发：${image.error!.slice(0, 200)}`));
+    }
     const sent = await step.run("review", () => sendReviews(db, telegramBot(), ids));
     return { contents: ids.length, sent };
   },
