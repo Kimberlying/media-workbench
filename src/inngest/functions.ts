@@ -1,6 +1,6 @@
 import { getFormat } from "@/lib/content/formats";
 import type { Account, AccountProfile, Org, Topic } from "@/lib/db/types";
-import { getGateway } from "@/lib/llm";
+import { getGateway, orgModelIds } from "@/lib/llm";
 import { generateContents } from "@/lib/pipeline/copywriting";
 import { dueContents, publishContent, syncMetrics } from "@/lib/pipeline/publish";
 import { collectInterests, fetchFeeds, fetchNews, fromGrok, RADAR_SOURCES, saveNews } from "@/lib/pipeline/radar";
@@ -210,12 +210,15 @@ export const telegramNote = inngest.createFunction(
       voice?: { fileId: string; mimeType: string };
     };
     if (voice) {
-      await step.run("transcribe", () =>
-        transcribeNote(db, telegramBot(), sourceId, voice, {
+      await step.run("transcribe", async () => {
+        // 转写和写稿用同一个 Gemini 模型（工作台里改过就用改过的）
+        const { data: source } = await db.from("sources").select("org_id").eq("id", sourceId).single();
+        const ids = await orgModelIds(source?.org_id ?? null);
+        return transcribeNote(db, telegramBot(), sourceId, voice, {
           apiKey: requireEnv("GEMINI_API_KEY"),
-          model: process.env.GEMINI_MODEL,
-        }),
-      );
+          model: ids["gemini-flash"] || process.env.GEMINI_MODEL,
+        });
+      });
     }
     await step.run("digest", () => digestSource(db, getGateway(), sourceId));
 
@@ -244,8 +247,14 @@ export const telegramNote = inngest.createFunction(
     const image = await step.run("illustrate", async () => {
       try {
         const { data: org } = await db.from("orgs").select("settings").eq("id", plan.topic.org_id).single();
-        const provider = (org?.settings as Org["settings"] | null)?.image_provider ?? "gemini";
-        const generate = process.env.GEMINI_IMAGE_MODEL === "off" ? null : imageGenerator(provider);
+        const settings = org?.settings as Org["settings"] | null;
+        const env = {
+          ...process.env,
+          GEMINI_IMAGE_MODEL: settings?.models?.image || process.env.GEMINI_IMAGE_MODEL,
+          OPENAI_IMAGE_MODEL: settings?.models?.openai_image || process.env.OPENAI_IMAGE_MODEL,
+        };
+        const generate =
+          process.env.GEMINI_IMAGE_MODEL === "off" ? null : imageGenerator(settings?.image_provider ?? "gemini", env);
         if (!generate) return { url: null, error: null };
         const url = await illustrate(db, ids, generate);
         return { url, error: null };

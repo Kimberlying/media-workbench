@@ -54,6 +54,8 @@ export interface GatewayConfig {
   providers?: Record<string, Provider>;
   usage: UsageSink;
   fetch?: typeof fetch;
+  /** 直连时按组织换模型 ID（工作台设置里填的），返回 别名 → 模型 ID；没填的用 providers 里的默认 */
+  modelIds?: (orgId: string | null) => Promise<Partial<Record<string, string>>>;
   /** 带工具的请求（Grok 搜 X）直连 xAI，不经过 LiteLLM；没配就仍走网关 */
   xai?: { apiKey: string; model: string; baseUrl?: string };
 }
@@ -78,8 +80,10 @@ export class LlmGateway {
   ): Promise<string | T> {
     const doFetch = this.config.fetch ?? fetch;
     const useResponses = Boolean(opts.tools?.length);
-    const target = this.target(opts.model ?? modelFor(opts.step), useResponses);
-    const model = target.model;
+    const alias = opts.model ?? modelFor(opts.step);
+    const target = this.target(alias, useResponses);
+    const custom = target.direct && this.config.modelIds ? (await this.config.modelIds(opts.orgId))[alias] : undefined;
+    const model = custom || target.model;
 
     const res = await doFetch(`${target.baseUrl}/${useResponses ? "responses" : "chat/completions"}`, {
       method: "POST",
@@ -140,13 +144,13 @@ export class LlmGateway {
   }
 
   // 这次请求发到哪：带工具且配了 xAI → 直连 xAI；别名有直连配置 → 直连；否则走 LiteLLM
-  private target(alias: string, useResponses: boolean): Provider {
+  private target(alias: string, useResponses: boolean): Provider & { direct?: boolean } {
     const { xai, providers, baseUrl, apiKey } = this.config;
     if (useResponses && xai) {
       return { baseUrl: `${(xai.baseUrl ?? "https://api.x.ai").replace(/\/$/, "")}/v1`, apiKey: xai.apiKey, model: xai.model };
     }
     const direct = providers?.[alias];
-    if (direct) return { ...direct, baseUrl: direct.baseUrl.replace(/\/$/, "") };
+    if (direct) return { ...direct, baseUrl: direct.baseUrl.replace(/\/$/, ""), direct: true };
     if (baseUrl && apiKey) return { baseUrl: `${baseUrl.replace(/\/$/, "")}/v1`, apiKey, model: alias };
     throw new Error(`模型 ${alias} 没有可用的接口：配 LLM_GATEWAY_URL，或配这家模型的 API key，见 .env.example`);
   }

@@ -6,10 +6,14 @@
 - 要改：直接回复那条消息，发改好的全文，会重新发一条给你审。
 - Substack：发的是复制包（第一行是标题，下面附封面图链接），复制贴进 Substack 编辑器发布，再点「已手动发布」。Substack 没有发布接口，只能这样。
 - 配图：默认用 Gemini 出，X 和 LinkedIn 交给 Buffer 时自动带上。图出不来不影响发稿，机器人会说一声。
-  - 在「账号与档案」最上面可以改成 **ChatGPT** 出图或 **不出图**。ChatGPT 会员不能给服务器调用，选 ChatGPT 要另办 OpenAI API key（platform.openai.com，单独充值），填进 `OPENAI_API_KEY`。
+  - 在「账号与档案」最上面的「模型和配图」里可以改成 **ChatGPT** 出图或 **不出图**。ChatGPT 会员不能给服务器调用，选 ChatGPT 要另办 OpenAI API key（platform.openai.com，单独充值），填进 `OPENAI_API_KEY`。
   - 不办 OpenAI key 也能用 ChatGPT 的图：在 ChatGPT 里做好图，在 TG 里**回复那条稿子发这张图**（当图片或当文件发都行），同一篇的几条稿子都会换成这张。
 
 资讯雷达、小红书、公众号、Discord、X 开发者 App 都不用配。
+
+## 换模型
+
+「账号与档案」最上面的「模型和配图」可以填写稿用的 Gemini 模型、Gemini 出图模型、ChatGPT 出图模型。空着用默认（写稿 `gemini-3.8-flash`，出图 `gemini-nano-banana-2.1` / `gpt-image-2`）。Gemini 或 OpenAI 出了新模型，把文档里的模型名填进去保存，一分钟内生效，不用重新部署。
 
 ## 要准备的
 

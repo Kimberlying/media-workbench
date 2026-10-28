@@ -39,6 +39,8 @@ export interface OrgSettings {
   platforms?: Platform[];
   /** Telegram 线配图用谁出：gemini（默认）/ openai / off */
   image_provider?: "gemini" | "openai" | "off";
+  /** 在工作台里换模型 ID，不用重新部署；空着用环境变量或代码里的默认 */
+  models?: { text?: string; image?: string; openai_image?: string };
 }
 
 export interface Org {
