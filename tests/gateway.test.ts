@@ -27,7 +27,7 @@ describe("模型网关", () => {
       usage: { record: async (u) => void records.push(u) },
     });
 
-    const text = await gw.generate({ orgId: "org-1", step: "copy.x_thread", messages: [], refId: "t-1" });
+    const text = await gw.generate({ orgId: "org-1", step: "radar.x", messages: [], refId: "t-1" });
 
     expect(text).toBe("你好");
     const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
@@ -36,7 +36,7 @@ describe("模型网关", () => {
     expect(records).toEqual([
       {
         org_id: "org-1",
-        step: "copy.x_thread",
+        step: "radar.x",
         model: "grok",
         input_tokens: 100,
         output_tokens: 40,
@@ -135,7 +135,7 @@ describe("模型网关", () => {
       providers: directProviders({ XAI_API_KEY: "xai-key", GEMINI_API_KEY: "g-key" }),
     });
 
-    await gw.generate({ orgId: null, step: "copy.x_post", messages: [] });
+    await gw.generate({ orgId: null, step: "radar.x", messages: [] });
     await gw.generate({ orgId: null, step: "copy.post", messages: [] });
 
     const calls = fetch.mock.calls as unknown as [string, RequestInit][];
@@ -159,5 +159,23 @@ describe("模型网关", () => {
   it("环境变量可以覆盖某个环节的模型", () => {
     expect(modelFor("copy.post", '{"copy.post":"gemini-pro"}')).toBe("gemini-pro");
     expect(modelFor("copy.post", "不是 JSON")).toBe("gemini-flash");
+  });
+
+  it("工作台里填的模型 ID 按组织覆盖直连的默认模型", async () => {
+    const records: UsageRecord[] = [];
+    const fetch = fakeFetch("好", "");
+    const modelIds = vi.fn(async (orgId: string | null) => (orgId === "org-1" ? { "gemini-flash": "gemini-4.0-flash" } : {}));
+    const gw = new LlmGateway({
+      fetch,
+      usage: { record: async (u) => void records.push(u) },
+      providers: directProviders({ GEMINI_API_KEY: "g" }),
+      modelIds,
+    });
+    await gw.generate({ orgId: "org-1", step: "copy.post", messages: [] });
+    await gw.generate({ orgId: "org-2", step: "copy.post", messages: [] });
+    const calls = fetch.mock.calls as unknown as [string, RequestInit][];
+    expect(JSON.parse(String(calls[0][1].body)).model).toBe("gemini-4.0-flash");
+    expect(JSON.parse(String(calls[1][1].body)).model).toBe("gemini-3.8-flash");
+    expect(records.map((r) => r.model)).toEqual(["gemini-4.0-flash", "gemini-3.8-flash"]);
   });
 });

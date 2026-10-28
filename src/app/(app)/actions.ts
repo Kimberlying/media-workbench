@@ -80,6 +80,27 @@ const CREATOR_TEMPLATE: { platform: Platform; field: string; language: string; p
   },
 ];
 
+/** 模型 ID 只收字母、数字和 . - _ :，空着就用默认 */
+const MODEL_ID = /^[A-Za-z0-9._:-]{1,80}$/;
+
+export async function saveModelSettings(formData: FormData) {
+  const { supabase, org } = await requireSession();
+  const models: Record<string, string> = {};
+  for (const key of ["text", "image", "openai_image"] as const) {
+    const value = String(formData.get(key) ?? "").trim();
+    if (!value) continue;
+    if (!MODEL_ID.test(value)) redirect(`/accounts?error=${encodeURIComponent(`模型名「${value}」不对，只能有字母、数字和 . - _ :`)}`);
+    models[key] = value;
+  }
+  const provider = z.enum(["gemini", "openai", "off"]).parse(formData.get("image_provider") ?? "gemini");
+  const { error } = await supabase
+    .from("orgs")
+    .update({ settings: { ...org.settings, image_provider: provider, models } })
+    .eq("id", org.id);
+  if (error) redirect(`/accounts?error=${encodeURIComponent(error.message)}`);
+  revalidatePath("/accounts");
+}
+
 export async function setupCreatorTemplate(formData: FormData) {
   const { supabase, org, workspace } = await requireSession();
   const { data: existing } = await supabase.from("accounts").select("platform").eq("workspace_id", workspace.id);

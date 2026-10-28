@@ -76,6 +76,7 @@ export function reviewText(content: BufferContent): string {
     lines.push(canSendToBuffer(content) ? "要改就直接回复这条，发改好的全文" : "没配 Buffer 频道：复制去发，发完点「已手动发布」");
   } else {
     lines.push("复制包：复制下面的全文贴进编辑器（标题在第一行），发完点「已手动发布」");
+    if (content.media_urls.length) lines.push(`封面图：${content.media_urls[0]}`);
   }
   return [...lines, "", content.body].join("\n");
 }
@@ -121,6 +122,10 @@ export class TelegramBot {
   /** 发审核消息，返回带按钮的那条消息的 id；长文拆成几条，按钮在最后一条 */
   async sendReview(content: BufferContent): Promise<number> {
     const chunks = splitMessage(reviewText(content));
+    // 有配图先发图，方便一起看；图发不出去（链接打不开）不影响审核
+    if (content.media_urls[0]) {
+      await this.call("sendPhoto", { chat_id: this.config.chatId, photo: content.media_urls[0] }).catch(() => undefined);
+    }
     let messageId = 0;
     for (const [i, text] of chunks.entries()) {
       const last = i === chunks.length - 1;
