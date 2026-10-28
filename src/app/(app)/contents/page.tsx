@@ -1,5 +1,16 @@
 import Link from "next/link";
-import { Card, Empty, PageHeader, buttonClass, ghostButtonClass, inputClass } from "@/components/ui";
+import {
+  Card,
+  Empty,
+  PageHeader,
+  PlatformBadge,
+  activeTabClass,
+  buttonClass,
+  chipClass,
+  ghostButtonClass,
+  inputClass,
+  tabClass,
+} from "@/components/ui";
 import { TzOffsetInput } from "@/components/tz-offset-input";
 import { PackSummary } from "@/components/pack-summary";
 import { RewriteForm } from "./rewrite-form";
@@ -52,11 +63,11 @@ export default async function ContentsPage({ searchParams }: PageProps<"/content
         <RewriteForm accounts={(accountRows ?? []) as Account[]} />
       </div>
       {notice ? (
-        <p className="mb-4 rounded bg-zinc-100 p-2 text-sm dark:bg-zinc-900">{String(notice)}</p>
+        <p className="mb-4 rounded-xl bg-white p-3 text-sm shadow-sm">{String(notice)}</p>
       ) : null}
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mb-5 flex flex-wrap gap-2">
         {tabs.map((t) => (
-          <Link key={t} href={`/contents?status=${t}`} className={t === status ? buttonClass : ghostButtonClass}>
+          <Link key={t} href={`/contents?status=${t}`} className={t === status ? activeTabClass : tabClass}>
             {STATUS_LABELS[t]}
           </Link>
         ))}
@@ -73,18 +84,26 @@ export default async function ContentsPage({ searchParams }: PageProps<"/content
             const format = formatOfVariant(c.variant);
             return (
               <Card key={c.id}>
-                <div className="mb-2 flex flex-wrap gap-2 text-xs text-zinc-500">
-                  <span>
-                    {c.account.platform} @{c.account.handle}
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <PlatformBadge platform={c.account.platform} />
+                  <span className="text-sm font-medium">
+                    {c.account.platform === "x" ? "@" : ""}
+                    {c.account.handle}
                   </span>
-                  <span>{format.label}</span>
-                  {c.scheduled_at ? <span>定时 {new Date(c.scheduled_at).toLocaleString("zh-CN")}</span> : null}
-                  {viaBuffer ? <span>经 Buffer 发布</span> : !viaApi ? <span>发布包 · 人工发</span> : null}
+                  <span className={chipClass}>{format.label}</span>
+                  {c.scheduled_at ? (
+                    <span className={chipClass}>定时 {new Date(c.scheduled_at).toLocaleString("zh-CN")}</span>
+                  ) : null}
+                  {viaBuffer ? (
+                    <span className={chipClass}>经 Buffer 发布</span>
+                  ) : !viaApi ? (
+                    <span className={chipClass}>发布包 · 人工发</span>
+                  ) : null}
                 </div>
                 {status === "scheduled" && viaApi && c.posts.some((p) => !p.platform_post_id) ? (
                   <form
                     action={resolveUncertainPublish.bind(null, c.id)}
-                    className="mb-2 flex flex-wrap items-center gap-2 rounded bg-amber-50 p-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                    className="mb-2 flex flex-wrap items-center gap-2 rounded-xl bg-warn-soft p-3 text-sm text-warn"
                   >
                     <span>发布中断，结果不确定，不会自动重发。请到 X 上看看有没有发出去：</span>
                     <input name="url" placeholder="发出去了就贴链接" className={`${inputClass} w-56`} />
@@ -99,7 +118,7 @@ export default async function ContentsPage({ searchParams }: PageProps<"/content
                 {status === "approved" && bufferPending ? (
                   <form
                     action={resolveUncertainBuffer.bind(null, c.id)}
-                    className="mb-2 flex flex-wrap items-center gap-2 rounded bg-amber-50 p-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                    className="mb-2 flex flex-wrap items-center gap-2 rounded-xl bg-warn-soft p-3 text-sm text-warn"
                   >
                     <span>交给 Buffer 时中断，结果不确定，不会重发。请到 Buffer 看看有没有这条：</span>
                     <button name="outcome" value="in_buffer" className={ghostButtonClass}>
@@ -111,7 +130,7 @@ export default async function ContentsPage({ searchParams }: PageProps<"/content
                   </form>
                 ) : null}
                 {c.compliance_hits.length > 0 ? (
-                  <p className="mb-2 text-sm text-red-600">命中禁用词：{c.compliance_hits.join("、")}，改完再提交。</p>
+                  <p className="mb-3 rounded-xl bg-bad-soft p-3 text-sm text-bad">命中禁用词：{c.compliance_hits.join("、")}，改完再提交。</p>
                 ) : null}
 
                 {status === "draft" ? (
@@ -136,7 +155,7 @@ export default async function ContentsPage({ searchParams }: PageProps<"/content
                   </form>
                 ) : (
                   <details open={format.kind !== "longform"}>
-                    <summary className="cursor-pointer text-sm text-zinc-500">
+                    <summary className="cursor-pointer text-sm text-muted">
                       {c.pack?.kind === "longform" ? c.pack.title : "正文"}
                     </summary>
                     <pre className="mt-2 whitespace-pre-wrap font-sans text-sm">{c.body}</pre>
@@ -164,7 +183,7 @@ export default async function ContentsPage({ searchParams }: PageProps<"/content
                         <button className={ghostButtonClass}>保存图片</button>
                       </form>
                       <form action={sendContentToBuffer.bind(null, c.id)} className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm text-zinc-500">交给 Buffer：</span>
+                        <span className="text-sm text-muted">交给 Buffer：</span>
                         {Object.entries(BUFFER_ACTIONS).map(([action, label]) => (
                           <button key={action} name="action" value={action} className={action === "queue" ? buttonClass : ghostButtonClass}>
                             {label}

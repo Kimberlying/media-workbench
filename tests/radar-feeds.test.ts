@@ -76,7 +76,7 @@ describe("固定信源解析", () => {
       return null;
     });
     expect(out.map((i) => i.url)).toEqual(["https://ph/1"]);
-    expect(FEEDS).toHaveLength(8);
+    expect(FEEDS).toHaveLength(11);
   });
 });
 

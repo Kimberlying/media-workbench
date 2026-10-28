@@ -8,12 +8,14 @@
 
 | 模块 | 做什么 | 代码 |
 | --- | --- | --- |
-| 资讯雷达 | 每天 7 点（北京时间）两路入共享资讯池：8 个固定信源（Product Hunt、r/SideProject、Hacker News、r/LocalLLaMA、GitHub Trending、NodeSeek、阮一峰周刊、Godly，搬自 kim 原来的 `fetch_ai_radar.py`），加 Grok 按账号档案实时搜 X（`x_search`）。入库前去重（14 天同链接、3 天同标题或核心词），并打「利他」「清醒」标签 | `src/lib/radar/`、`src/lib/pipeline/radar.ts` |
+| 资讯雷达 | 每天 7 点（北京时间）两路入共享资讯池：11 个固定信源（Product Hunt、r/SideProject、Hacker News、r/LocalLLaMA、GitHub Trending、NodeSeek、阮一峰周刊、Godly，搬自 kim 原来的 `fetch_ai_radar.py`；X Builders、Builder 播客、官方博客，来自 follow-builders 的公开 feed，接法参考 signal-desk），加 Grok 按账号档案实时搜 X（`x_search`）。入库前去重（14 天同链接、3 天同标题或核心词），并打「利他」「清醒」标签 | `src/lib/radar/`、`src/lib/pipeline/radar.ts` |
 | 今日 3 条与日报 | 资讯入库后，按洞察、实用、产品三个方向各挑一条，给每个 X 账号写成短推草稿（只生成不发）；热度前 5 和这 3 条推到 Discord（`DISCORD_WEBHOOK_URL`）；`/api/digest` 出日报，Mac 上的 `scripts/obsidian_sync.py` 每天拉下来写进 Obsidian | `src/lib/pipeline/daily.ts`、`src/lib/notify/discord.ts`、`scripts/obsidian_sync.py` |
+| 素材（链接转写） | 对标 SnapVee：贴一个 YouTube、TikTok、Instagram、X、Facebook 视频或音视频文件链接，经 [Supadata](https://supadata.ai) 转成带时间戳的文字稿（有字幕取字幕，没有就 AI 转写；长视频后台排队），再整理出摘要、章节、要点、金句、爆款拆解和 3 个可做的选题。选一个角度勾上账号就能直接写多平台文案，素材会带进提示词；资讯雷达里的视频也能一键转写；整理结果和文字稿可下载成 Markdown 放进 Obsidian。取字幕的做法参考 [youtube-article](https://github.com/Kimberlying/youtube-article) | `src/lib/sources/`、`src/lib/pipeline/sources.ts`、`src/app/(app)/sources` |
 | 选题策划 | 按账号档案从资讯池筛选题，带热度与相关性评分；可排进周日历 | `src/lib/pipeline/topics.ts` |
 | 文案生成 | 一个选题按所选账号和形式一次出多个版本，套档案语气和知识库 | `src/lib/pipeline/copywriting.ts`、`src/lib/content/formats.ts` |
 | X 短推 | 从选题生成，或把一段素材「润色」「翻译」成一条短推；不超过 250 字、无 emoji、不以问号结尾、不加互动引导，可选模型、可重出。规则沿用 [tweet-buffer-workflow](https://github.com/Kimberlying/tweet-buffer-workflow) | `src/lib/content/x-post.ts`、`src/app/(app)/contents/rewrite-form.tsx` |
-| 长文 | X 长文；公众号长文由同一篇 X 长文改写，并配 3–6 张横版贴图 | `src/lib/xhs/prompts.ts` |
+| 长文 | X 长文；公众号长文由同一篇 X 长文改写，并配 3–6 张横版贴图；知乎回答（第一行是读者会搜的问题） | `src/lib/xhs/prompts.ts` |
+| Threads 帖子 | 500 字符以内、口语化，最多 1 个话题标签；和知乎一样生成后人工发 | `src/lib/content/formats.ts` |
 | 小红书内容包 | brief → 8–12 张知识卡 → 标题、正文、标签、检查，结构沿用 [build-xhs-content-pack](https://github.com/Kimberlying/build-xhs-content-pack) | `src/lib/xhs/` |
 | 卡片出图（二期第一项） | 小红书卡片和公众号贴图在工作台里直接出 PNG：「内容」页可预览，下载的发布包里带好 `images/`。四套风格、六种版式移植自 build-xhs-content-pack 的 `render_cards.py` | `src/lib/cards/` |
 | 知识库（简版） | 语气指南、禁用词、历史爆款等，生成时自动带上 | `src/app/(app)/knowledge` |
@@ -25,7 +27,7 @@
 
 内容状态：草稿 → 合规检查 → 待审批 → 已批准 → 已排期 → 已发布，任一审批环节可退回草稿。自用组织默认关闭审批（`orgs.settings.approval_required = false`），合规通过直接到已批准。
 
-不在一期：AI 生图（封面、配图）、视频剪辑、多级审批台、互动回复、订阅计费，以及资讯雷达里的对标账号视频转录。
+不在一期：AI 生图（封面、配图）、视频剪辑、多级审批台、FB 的 API 接入（LinkedIn、Instagram 经 Buffer）、互动回复、订阅计费，以及按对标账号自动抓新视频转录（现在是贴链接或在雷达里点「转写」）。
 
 ## 发布包和出图
 

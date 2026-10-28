@@ -68,8 +68,8 @@ function fakeLlm() {
   return { llm, calls };
 }
 
-/** 只实现 copywriting 用到的几个查询 */
-function fakeDb() {
+/** 只实现 copywriting 用到的几个查询；source 是选题关联的素材 */
+function fakeDb(source: Record<string, unknown> | null = null) {
   const inserted: Record<string, unknown>[] = [];
   const chain = {
     select: () => chain,
@@ -77,6 +77,7 @@ function fakeDb() {
     in: () => chain,
     order: () => chain,
     limit: async () => ({ data: [], error: null }),
+    maybeSingle: async () => ({ data: source, error: null }),
     insert: (row: Record<string, unknown>) => {
       inserted.push(row);
       return { select: () => ({ single: async () => ({ data: { id: `c${inserted.length}` }, error: null }) }) };
@@ -149,6 +150,48 @@ describe("多形式文案生成", () => {
     );
     xhsDraft.cards[3].title = "卡片标题4";
     expect(inserted[0]).toMatchObject({ status: "draft", compliance_hits: ["稳赚"] });
+  });
+
+  it("从素材出的选题：短推带整理结果，长文和小红书再带文字稿", async () => {
+    const { llm, calls } = fakeLlm();
+    const { db } = fakeDb({
+      url: "https://www.youtube.com/watch?v=abc",
+      title: "Building agents",
+      author: "Latent Space",
+      digest: {
+        title: "怎么做 Agent",
+        summary: "嘉宾讲了做 Agent 的三个坑。",
+        chapters: [],
+        key_points: ["先做评测"],
+        quotes: [{ start: 90, text: "Evals are the product.", zh: "评测就是产品。" }],
+        breakdown: { hook: "", structure: [], why_it_works: "", reuse: "先抛结论再讲故事" },
+        angles: [],
+      },
+      transcript: [{ start: 0, text: "Welcome back to the show." }],
+    });
+    await generateContents(
+      db,
+      llm,
+      { ...topic, source_id: "s1" },
+      [
+        { account: account("x"), profile, format: getFormat("x.post") },
+        { account: { ...account("x"), id: "x2" }, profile, format: getFormat("x.article") },
+        { account: account("xiaohongshu"), profile, format: getFormat("xiaohongshu.pack") },
+      ],
+      false,
+    );
+
+    const postCall = calls.find((c) => (c.messages[1].content as string).includes("写一条 X 短推"))!;
+    expect(postCall.messages[1].content).toContain("<material>");
+    expect(postCall.messages[1].content).toContain("「Evals are the product.」（评测就是产品。）");
+    expect(postCall.messages[1].content).not.toContain("Welcome back");
+
+    const articleCall = calls.find((c) => (c.messages[1].content as string).includes("X 长文（Articles）"))!;
+    expect(articleCall.messages[1].content).toContain("[0:00] Welcome back to the show.");
+    // 小红书以已经写好的长文为准，素材只带整理结果
+    const xhsCall = calls.find((c) => (c.messages[0].content as string).includes("小红书账号"))!;
+    expect(xhsCall.messages[1].content).toContain("先抛结论再讲故事");
+    expect(xhsCall.messages[1].content).not.toContain("Welcome back");
   });
 
   it("从 Markdown 取标题", () => {

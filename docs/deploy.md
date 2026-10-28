@@ -8,6 +8,7 @@
 | Supabase | 数据库、邮箱登录 |
 | Inngest Cloud | 定时任务：每天 7 点资讯雷达、3 点拉数据、定时发布 |
 | xAI + Gemini API | 生成内容；不再需要单独托管 LiteLLM，配了 key 就直连 |
+| Supadata | 「素材」页贴视频、播客链接转文字稿（可选，不配就只有这个页面用不了） |
 
 带「你」的步骤要用你自己的账号操作，其余照做即可。
 
@@ -16,7 +17,7 @@
 1. 在 supabase.com 新建项目，区域选离你近的（如 Singapore / Tokyo），记下数据库密码。
 2. 执行建表 SQL，二选一：
    - 本机装了 Supabase CLI：`supabase link --project-ref <项目 ref>`，然后 `supabase db push`
-   - 或者在 SQL Editor 里按文件名顺序粘贴 `supabase/migrations/` 下的三个文件并运行
+   - 或者在 SQL Editor 里按文件名顺序粘贴 `supabase/migrations/` 下的全部文件并运行
 3. Project Settings → API，记下 `Project URL`、`anon public` key、`service_role` key。
 4. Authentication → URL Configuration：Site URL 填线上域名；Redirect URLs 加 `https://<线上域名>/auth/callback` 和 `http://localhost:3000/auth/callback`。
 
@@ -24,6 +25,8 @@
 
 - xAI：console.x.ai → API Keys 新建，充值少量额度。资讯雷达搜 X 按抓到的帖子计费，每千条 5 美元，另加 token 费（grok-4.7 输入 2 / 输出 6 美元每百万 token）。
 - Gemini：aistudio.google.com → Get API key，绑定结算账号走付费档（免费档会拿数据训练，且限速）。
+
+- Supadata（「素材」页转写用）：dash.supadata.ai 注册，引导流程里会自动生成 API key，填进 `SUPADATA_API_KEY`。免费档每月 100 积分：有字幕的视频 1 积分一条，没字幕用 AI 转写每分钟 2 积分（一小时的播客 120 积分），元数据另 1 积分；常用的话升 Basic（每月 300 积分）。youtube-article 插件用的是同一家，可以共用一个 key。
 
 拿到 key 后在本地先核对一遍：把 key 填进 `.env.local`，运行 `npm run check:models`。它会真调一次 Grok、Gemini 的 JSON 模式和 Grok 的 `x_search`，花几分钱。
 
@@ -38,7 +41,7 @@
 ## 4. Inngest（你）
 
 1. Vercel 项目 → Integrations → 搜 Inngest → Add，按提示登录 Inngest 并关联这个项目。它会自动写入 `INNGEST_EVENT_KEY`、`INNGEST_SIGNING_KEY`，并在每次部署后同步函数。
-2. 在 Inngest 控制台的 Apps 里能看到 `media-workbench` 和 5 个函数，`radar-daily` 的下次运行时间是北京时间早上 7 点。
+2. 在 Inngest 控制台的 Apps 里能看到 `media-workbench` 和 6 个函数，`radar-daily` 的下次运行时间是北京时间早上 7 点。
 3. 想马上看效果：在 `radar-daily` 页面点 Invoke 手动跑一次。
 
 ## 5. Discord 和 X（你）
@@ -67,7 +70,7 @@
 ## 6. 第一次登录
 
 1. 打开线上域名，用邮箱登录，首次登录会自动建好你的组织和工作区。
-2. 「账号与档案」连接 X 账号，填账号档案（定位、语气、关注话题）。资讯雷达按档案里的话题搜 X，没有档案只跑 8 个固定信源。
+2. 「账号与档案」连接 X 账号，填账号档案（定位、语气、关注话题）。资讯雷达按档案里的话题搜 X，没有档案只跑 11 个固定信源。
 3. 第二天早上 7 点后看「选题」和 Discord；或者在 Inngest 手动 Invoke 一次 `radar-daily`。
 
 ## 7. Mac 上的 Obsidian 同步，并停掉旧脚本（你）

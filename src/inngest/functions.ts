@@ -6,6 +6,16 @@ import { dueContents, publishContent, syncMetrics } from "@/lib/pipeline/publish
 import { collectInterests, fetchFeeds, fetchNews, fromGrok, RADAR_SOURCES, saveNews } from "@/lib/pipeline/radar";
 import { loadDigest, writeDailyPosts } from "@/lib/pipeline/daily";
 import { planTopicsForAccount } from "@/lib/pipeline/topics";
+import {
+  checkTranscript,
+  digestSource,
+  loadSource,
+  markSourceFailed,
+  saveMetadata,
+  startTranscript,
+  supadataFromEnv,
+  type TranscriptStep,
+} from "@/lib/pipeline/sources";
 import { discordMessages, sendDiscord } from "@/lib/notify/discord";
 import { digestDay } from "@/lib/radar/daily";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -133,6 +143,43 @@ export const generateContentsFn = inngest.createFunction(
   },
 );
 
+// 素材：贴一个视频或播客链接 → 文字稿 → 整理。长视频 Supadata 异步转写，先等 10 秒查几次，再每 30 秒查一次，最多等 20 分钟左右
+export const transcribeSource = inngest.createFunction(
+  {
+    id: "transcribe-source",
+    triggers: [{ event: EVENTS.sourceRequested }],
+    // 同一条素材同时只跑一个，重复点「重试」不会重复扣积分
+    singleton: { key: "event.data.sourceId", mode: "skip" },
+    onFailure: async ({ event, error }) => {
+      const { sourceId } = event.data.event.data as { sourceId: string };
+      await markSourceFailed(createAdminClient(), sourceId, error.message);
+    },
+  },
+  async ({ event, step }) => {
+    const db = createAdminClient();
+    const { sourceId } = event.data as { sourceId: string };
+    const source = await step.run("load", () => loadSource(db, sourceId));
+
+    await step.run("metadata", () => saveMetadata(db, source, supadataFromEnv()));
+    let result: TranscriptStep = await step.run("transcribe", () => startTranscript(db, source, supadataFromEnv()));
+    if (result.kind === "job") {
+      const jobId = result.jobId;
+      for (let i = 0; i < 42 && result.kind !== "done" && result.kind !== "failed"; i++) {
+        await step.sleep(`wait-${i}`, i < 6 ? "10s" : "30s");
+        result = await step.run(`poll-${i}`, () => checkTranscript(db, sourceId, jobId, supadataFromEnv()));
+      }
+      if (result.kind !== "done" && result.kind !== "failed") {
+        await step.run("timeout", () => markSourceFailed(db, sourceId, "转写超过 20 分钟还没好，稍后点「重试」"));
+        return { status: "timeout" };
+      }
+    }
+    if (result.kind === "failed") return { status: "failed" };
+
+    const digest = await step.run("digest", () => digestSource(db, getGateway(), sourceId));
+    return { status: "ready", ...digest };
+  },
+);
+
 export const publishDue = inngest.createFunction(
   { id: "publish-due", triggers: [{ cron: "*/5 * * * *" }] },
   async ({ step }) => {
@@ -156,4 +203,4 @@ export const metricsDaily = inngest.createFunction(
   },
 );
 
-export const functions = [radarDaily, planTopics, generateContentsFn, publishDue, metricsDaily];
+export const functions = [radarDaily, planTopics, generateContentsFn, transcribeSource, publishDue, metricsDaily];

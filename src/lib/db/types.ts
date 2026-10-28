@@ -1,10 +1,19 @@
 // 与 supabase/migrations 对应的领域类型。表结构变更时同步修改。
 
+import type { SourceDigest, TranscriptSegment } from "@/lib/sources/schema";
 import type { ContentPack } from "@/lib/xhs/schema";
 
 export type MemberRole = "owner" | "editor" | "reviewer" | "client_viewer";
 
-export type Platform = "x" | "instagram" | "facebook" | "linkedin" | "xiaohongshu" | "wechat";
+export type Platform =
+  | "x"
+  | "instagram"
+  | "facebook"
+  | "linkedin"
+  | "xiaohongshu"
+  | "wechat"
+  | "zhihu"
+  | "threads";
 
 export type TopicStatus = "candidate" | "selected" | "scheduled" | "used" | "discarded";
 
@@ -89,6 +98,29 @@ export interface Topic {
   score: number;
   status: TopicStatus;
   scheduled_week: string | null;
+  /** 从素材出的选题：写文案时把素材带进提示词 */
+  source_id?: string | null;
+}
+
+export type SourceStatus = "pending" | "transcribing" | "digesting" | "ready" | "failed";
+
+/** 素材：一个视频或播客链接的文字稿和整理结果 */
+export interface Source {
+  id: string;
+  org_id: string;
+  workspace_id: string;
+  url: string;
+  platform: string;
+  title: string;
+  author: string;
+  duration_seconds: number | null;
+  lang: string | null;
+  mode: "auto" | "native";
+  status: SourceStatus;
+  error: string | null;
+  transcript: TranscriptSegment[] | null;
+  digest: SourceDigest | null;
+  created_at: string;
 }
 
 export interface Content {
