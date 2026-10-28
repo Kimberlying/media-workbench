@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { BUFFER_ACTIONS, BufferRejected, type BufferAction } from "@/lib/buffer/client";
+import { bufferProblem, sendToBuffer, type BufferContent } from "@/lib/buffer/send";
 import { checkTabooWords } from "@/lib/content/compliance";
 import { getFormat, variantOf } from "@/lib/content/formats";
 import { rewriteMaterial, type RewriteMode } from "@/lib/content/x-post";
@@ -15,6 +17,8 @@ import type { ContentStatus, KnowledgeType, Platform } from "@/lib/db/types";
 import { weekStart } from "@/lib/dates";
 import { loadKnowledge } from "@/lib/pipeline/copywriting";
 import { requireSession } from "@/lib/session";
+import { requireEnv } from "@/lib/env";
+import { TelegramBot } from "@/lib/telegram/bot";
 import { detectPlatform, normalizeSourceUrl, SUPPORTED_HINT } from "@/lib/sources/platforms";
 import type { SourceDigest } from "@/lib/sources/schema";
 import { EVENTS, inngest } from "@/inngest/client";
@@ -32,7 +36,7 @@ function list(raw: FormDataEntryValue | null): string[] {
 // 账号与档案
 // ---------------------------------------------------------------------------
 
-const PLATFORMS: Platform[] = ["x", "instagram", "facebook", "linkedin", "xiaohongshu", "wechat", "zhihu", "threads"];
+const PLATFORMS: Platform[] = ["x", "instagram", "facebook", "linkedin", "xiaohongshu", "wechat", "zhihu", "threads", "substack"];
 
 export async function addManualAccount(formData: FormData) {
   const { supabase, org, workspace } = await requireSession();
@@ -47,6 +51,60 @@ export async function addManualAccount(formData: FormData) {
     handle,
   });
   if (error) redirect(`/accounts?error=${encodeURIComponent(error.message)}`);
+  revalidatePath("/accounts");
+}
+
+// 技术博主模板（building in public）：X 中文短推、Substack 英文长文、LinkedIn 英文帖。
+// 已经有这个平台账号的跳过；档案之后在本页随时改。
+const CREATOR_TEMPLATE: { platform: Platform; field: string; language: string; positioning: string; tone: string }[] = [
+  {
+    platform: "x",
+    field: "x_handle",
+    language: "zh-CN",
+    positioning: "技术创作者，building in public：记录自己做 AI 产品和工程的过程、判断和踩坑",
+    tone: "真诚、具体、像工程师跟同行聊天；有观点但不说满，不用营销腔",
+  },
+  {
+    platform: "substack",
+    field: "substack_handle",
+    language: "en",
+    positioning: "A builder's newsletter: what I'm building with AI, the decisions behind it, and what I learned",
+    tone: "First person, honest and concrete; explain trade-offs and show the work; no hype",
+  },
+  {
+    platform: "linkedin",
+    field: "linkedin_handle",
+    language: "en",
+    positioning: "Technical builder sharing hands-on AI engineering work in public",
+    tone: "Professional but personal; lead with the insight, back it with specifics; no buzzwords",
+  },
+];
+
+export async function setupCreatorTemplate(formData: FormData) {
+  const { supabase, org, workspace } = await requireSession();
+  const { data: existing } = await supabase.from("accounts").select("platform").eq("workspace_id", workspace.id);
+  const have = new Set((existing ?? []).map((a) => a.platform as string));
+  const audience = String(formData.get("audience") ?? "").trim() || "做 AI 产品的工程师、技术负责人和招聘方 / AI builders, engineers and hiring managers";
+
+  for (const t of CREATOR_TEMPLATE) {
+    if (have.has(t.platform)) continue;
+    const handle = String(formData.get(t.field) ?? "").replace(/^@/, "").trim();
+    if (!handle) continue;
+    const { data: profile, error } = await supabase
+      .from("account_profiles")
+      .insert({ org_id: org.id, positioning: t.positioning, audience, tone: t.tone, language: t.language })
+      .select("id")
+      .single();
+    if (error) redirect(`/accounts?error=${encodeURIComponent(error.message)}`);
+    const { error: accountError } = await supabase.from("accounts").insert({
+      org_id: org.id,
+      workspace_id: workspace.id,
+      platform: t.platform,
+      handle,
+      profile_id: profile.id,
+    });
+    if (accountError) redirect(`/accounts?error=${encodeURIComponent(accountError.message)}`);
+  }
   revalidatePath("/accounts");
 }
 
@@ -209,9 +267,14 @@ export async function retrySource(sourceId: string, formData: FormData) {
     .update(patch)
     .eq("id", sourceId)
     .eq("status", "failed")
-    .select("id")
+    .select("id, platform, transcript")
     .maybeSingle();
-  if (data) await inngest.send({ name: EVENTS.sourceRequested, data: { sourceId } });
+  if (data?.platform === "telegram") {
+    // Telegram 笔记：已经有文字的从整理重来；语音没转出来的只能在 TG 里重发
+    if (data.transcript) await inngest.send({ name: EVENTS.telegramNote, data: { sourceId } });
+  } else if (data) {
+    await inngest.send({ name: EVENTS.sourceRequested, data: { sourceId } });
+  }
   revalidatePath("/sources");
 }
 
@@ -359,7 +422,7 @@ export async function scheduleContent(contentId: string, formData: FormData) {
   await moveContent(contentId, "scheduled", { scheduled_at: utc });
 }
 
-/** 发布包平台：人工发完后在这里登记 */
+/** 发布包平台：人工发完后在这里登记；交给 Buffer 的内容已有发布记录，这里只改状态 */
 export async function markPublishedManually(contentId: string, formData: FormData) {
   const { supabase, org } = await requireSession();
   await moveContent(contentId, "published");
@@ -486,6 +549,94 @@ export async function resolveUncertainPublish(contentId: string, formData: FormD
     await admin.from("contents").update({ status: "published" }).eq("id", contentId).eq("status", "scheduled");
   } else {
     // 确认没发出去：去掉占位记录，下一轮会重新发布
+    await admin.from("posts").delete().eq("content_id", contentId).is("platform_post_id", null);
+  }
+  revalidatePath("/contents");
+}
+
+// ---------------------------------------------------------------------------
+// 经 Buffer 发布（LinkedIn、Instagram 等）：工作台直推，或推到 Telegram 再点按钮
+// ---------------------------------------------------------------------------
+
+export async function setBufferChannel(accountId: string, formData: FormData) {
+  const { supabase } = await requireSession();
+  const channelId = String(formData.get("buffer_channel_id") ?? "").trim() || null;
+  const { error } = await supabase.from("accounts").update({ buffer_channel_id: channelId }).eq("id", accountId);
+  if (error) redirect(`/accounts?error=${encodeURIComponent(error.message)}`);
+  revalidatePath("/accounts");
+}
+
+/** 用当前用户身份读，确认看得到这条内容；之后的写入用 service role */
+async function loadBufferContent(contentId: string): Promise<BufferContent> {
+  const { supabase } = await requireSession();
+  const { data, error } = await supabase
+    .from("contents")
+    .select("*, account:accounts(*)")
+    .eq("id", contentId)
+    .single();
+  if (error || !data) throw new Error("找不到内容");
+  return data as BufferContent;
+}
+
+function backToContents(status: string, notice: string): never {
+  revalidatePath("/contents");
+  redirect(`/contents?status=${status}&notice=${encodeURIComponent(notice)}`);
+}
+
+export async function saveMediaUrls(contentId: string, formData: FormData) {
+  const { supabase } = await requireSession();
+  // 每行一个地址；只收 https，Buffer 要能直接公开访问
+  const urls = String(formData.get("media_urls") ?? "")
+    .split(/\s+/)
+    .filter((u) => /^https:\/\//.test(u));
+  const { error } = await supabase.from("contents").update({ media_urls: urls }).eq("id", contentId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/contents");
+}
+
+export async function sendContentToBuffer(contentId: string, formData: FormData) {
+  const action = z.enum(Object.keys(BUFFER_ACTIONS) as [BufferAction, ...BufferAction[]]).parse(formData.get("action"));
+  const content = await loadBufferContent(contentId);
+  let notice: string;
+  try {
+    notice = (await sendToBuffer(createAdminClient(), content, action)).summary;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    notice =
+      err instanceof BufferRejected
+        ? `没有交给 Buffer：${reason}`
+        : `结果不确定，不会重发：${reason}。请到 Buffer 核对后在下面登记。`;
+  }
+  backToContents("approved", notice);
+}
+
+export async function sendContentToTelegram(contentId: string) {
+  const content = await loadBufferContent(contentId);
+  const problem = bufferProblem(content);
+  if (problem) backToContents("approved", problem);
+  const bot = new TelegramBot({ token: requireEnv("TELEGRAM_BOT_TOKEN"), chatId: requireEnv("TELEGRAM_CHAT_ID") });
+  const messageId = await bot.sendReview(content);
+  // 记下这条消息，TG 回调只认它；重新推送后旧消息上的按钮失效
+  const { error } = await createAdminClient()
+    .from("contents")
+    .update({ telegram_message_id: messageId })
+    .eq("id", content.id);
+  if (error) throw new Error(error.message);
+  backToContents("approved", "已推到 Telegram，在 TG 里选怎么交给 Buffer");
+}
+
+/** 交给 Buffer 时中断：到 Buffer 看过之后在这里登记 */
+export async function resolveUncertainBuffer(contentId: string, formData: FormData) {
+  await loadBufferContent(contentId);
+  const admin = createAdminClient();
+  if (String(formData.get("outcome")) === "in_buffer") {
+    await admin
+      .from("posts")
+      .update({ platform_post_id: "已在 Buffer 核对" })
+      .eq("content_id", contentId)
+      .is("platform_post_id", null);
+    await admin.from("contents").update({ status: "scheduled" }).eq("id", contentId).eq("status", "approved");
+  } else {
     await admin.from("posts").delete().eq("content_id", contentId).is("platform_post_id", null);
   }
   revalidatePath("/contents");

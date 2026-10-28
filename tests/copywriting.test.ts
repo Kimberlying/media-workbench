@@ -23,6 +23,7 @@ const account = (platform: Account["platform"], id = platform): Account => ({
   handle: "kim",
   profile_id: "p",
   token_ref: null,
+  buffer_channel_id: null,
 });
 const topic = { id: "t", org_id: "o", title: "新模型发布", angle: "对比上一代" } as Topic;
 

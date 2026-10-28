@@ -2,7 +2,7 @@
 // 支持范围跟着 Supadata 的转写接口走：YouTube、TikTok、Instagram、X、Facebook 的视频，
 // 以及公开的音视频文件直链。B 站、抖音、小红书和播客 App 的链接它不支持。
 
-export type SourcePlatform = "youtube" | "tiktok" | "instagram" | "x" | "facebook" | "file";
+export type SourcePlatform = "youtube" | "tiktok" | "instagram" | "x" | "facebook" | "file" | "telegram";
 
 export const PLATFORM_LABELS: Record<SourcePlatform, string> = {
   youtube: "YouTube",
@@ -11,6 +11,7 @@ export const PLATFORM_LABELS: Record<SourcePlatform, string> = {
   x: "X",
   facebook: "Facebook",
   file: "音视频文件",
+  telegram: "Telegram 笔记",
 };
 
 export const SUPPORTED_HINT =

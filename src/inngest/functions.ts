@@ -6,6 +6,9 @@ import { dueContents, publishContent, syncMetrics } from "@/lib/pipeline/publish
 import { collectInterests, fetchFeeds, fetchNews, fromGrok, RADAR_SOURCES, saveNews } from "@/lib/pipeline/radar";
 import { loadDigest, writeDailyPosts } from "@/lib/pipeline/daily";
 import { planTopicsForAccount } from "@/lib/pipeline/topics";
+import { planNote, sendReviews, transcribeNote } from "@/lib/pipeline/telegram";
+import { requireEnv } from "@/lib/env";
+import { TelegramBot } from "@/lib/telegram/bot";
 import {
   checkTranscript,
   digestSource,
@@ -180,6 +183,65 @@ export const transcribeSource = inngest.createFunction(
   },
 );
 
+function telegramBot() {
+  return new TelegramBot({ token: requireEnv("TELEGRAM_BOT_TOKEN"), chatId: requireEnv("TELEGRAM_CHAT_ID") });
+}
+
+// Telegram 笔记：（语音先转写）→ 整理观点 → 按技术博主模板写 X、Substack、LinkedIn → 逐条推回 TG 审核
+export const telegramNote = inngest.createFunction(
+  {
+    id: "telegram-note",
+    triggers: [{ event: EVENTS.telegramNote }],
+    singleton: { key: "event.data.sourceId", mode: "skip" },
+    onFailure: async ({ event, error }) => {
+      const { sourceId, messageId } = event.data.event.data as { sourceId: string; messageId?: number };
+      await markSourceFailed(createAdminClient(), sourceId, error.message);
+      await telegramBot().send(`这条没处理成：${error.message.slice(0, 300)}\n可以到工作台「素材」里看，或者重发一次。`, undefined, messageId);
+    },
+  },
+  async ({ event, step }) => {
+    const db = createAdminClient();
+    const { sourceId, voice } = event.data as {
+      sourceId: string;
+      messageId?: number;
+      voice?: { fileId: string; mimeType: string };
+    };
+    if (voice) {
+      await step.run("transcribe", () =>
+        transcribeNote(db, telegramBot(), sourceId, voice, {
+          apiKey: requireEnv("GEMINI_API_KEY"),
+          model: process.env.GEMINI_MODEL,
+        }),
+      );
+    }
+    await step.run("digest", () => digestSource(db, getGateway(), sourceId));
+
+    const plan = await step.run("plan", () => planNote(db, sourceId));
+    if (!plan) {
+      await step.run("no-accounts", () =>
+        telegramBot().send("笔记整理好了，但还没有可写的账号：到工作台「账号与档案」点「一键建好技术博主模板」。"),
+      );
+      return { contents: 0 };
+    }
+    const ids = await step.run("generate", async () => {
+      const { data: org, error } = await db.from("orgs").select("settings").eq("id", plan.topic.org_id).single();
+      if (error) throw new Error(error.message);
+      return generateContents(
+        db,
+        getGateway(),
+        plan.topic,
+        plan.targets.map(({ formatId, ...t }) => ({ ...t, format: getFormat(formatId) })),
+        (org.settings as Org["settings"] | null)?.approval_required ?? false,
+      );
+    });
+    await step.run("mark-topic-used", async () => {
+      await db.from("topics").update({ status: "used" }).eq("id", plan.topic.id);
+    });
+    const sent = await step.run("review", () => sendReviews(db, telegramBot(), ids));
+    return { contents: ids.length, sent };
+  },
+);
+
 export const publishDue = inngest.createFunction(
   { id: "publish-due", triggers: [{ cron: "*/5 * * * *" }] },
   async ({ step }) => {
@@ -203,4 +265,12 @@ export const metricsDaily = inngest.createFunction(
   },
 );
 
-export const functions = [radarDaily, planTopics, generateContentsFn, transcribeSource, publishDue, metricsDaily];
+export const functions = [
+  radarDaily,
+  planTopics,
+  generateContentsFn,
+  transcribeSource,
+  telegramNote,
+  publishDue,
+  metricsDaily,
+];

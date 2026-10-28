@@ -16,6 +16,7 @@ const registry: Record<Platform, PlatformConnector> = {
   wechat: manualConnector("wechat"),
   zhihu: manualConnector("zhihu"),
   threads: manualConnector("threads"),
+  substack: manualConnector("substack"),
 };
 
 export function getConnector(platform: Platform): PlatformConnector {

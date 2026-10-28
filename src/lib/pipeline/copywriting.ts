@@ -70,7 +70,7 @@ export function buildCopyPrompt(
       content:
         `你在为账号 @${account.handle} 写内容。${output}\n` +
         `账号定位：${profile.positioning}\n目标受众：${profile.audience}\n语气：${profile.tone}\n` +
-        `语言：${profile.language}\n` +
+        `语言：${profile.language}${profile.language.toLowerCase().startsWith("en") ? "，全文用英文写（write in English）" : ""}\n` +
         (knowledge.toneGuides.length ? `语气指南：\n${knowledge.toneGuides.join("\n")}\n` : "") +
         `绝对不能出现的词：${[...profile.taboo, ...knowledge.tabooWords].join("、") || "无"}`,
     },
@@ -87,7 +87,7 @@ export interface Target {
   format: FormatSpec;
 }
 
-const ORDER: Record<string, number> = { "x.article": 0, "wechat.article": 1, "zhihu.answer": 2, "xiaohongshu.pack": 3 };
+const ORDER: Record<string, number> = { "x.article": 0, "substack.article": 0, "wechat.article": 1, "zhihu.answer": 2, "xiaohongshu.pack": 3 };
 
 /** 长文先写：公众号长文由 X 长文改写，小红书内容包以长文为素材拆卡 */
 export function orderTargets(targets: Target[]): Target[] {
@@ -134,7 +134,7 @@ export async function loadMaterial(db: SupabaseClient, sourceId: string | null |
   if (!sourceId) return NO_MATERIAL;
   const { data, error } = await db
     .from("sources")
-    .select("url, title, author, digest, transcript")
+    .select("url, platform, title, author, digest, transcript")
     .eq("id", sourceId)
     .maybeSingle();
   if (error) throw new Error(error.message);

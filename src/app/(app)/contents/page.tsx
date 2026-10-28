@@ -15,6 +15,8 @@ import { TzOffsetInput } from "@/components/tz-offset-input";
 import { PackSummary } from "@/components/pack-summary";
 import { RewriteForm } from "./rewrite-form";
 import { publishesViaApi } from "@/lib/connectors";
+import { BUFFER_ACTIONS } from "@/lib/buffer/client";
+import { canSendToBuffer } from "@/lib/buffer/send";
 import { formatOfVariant } from "@/lib/content/formats";
 import { STATUS_LABELS } from "@/lib/content/status";
 import type { Account, Content, ContentStatus } from "@/lib/db/types";
@@ -24,8 +26,12 @@ import {
   markPublishedManually,
   regenerateXPost,
   rejectContent,
+  resolveUncertainBuffer,
   resolveUncertainPublish,
   saveContentBody,
+  saveMediaUrls,
+  sendContentToBuffer,
+  sendContentToTelegram,
   scheduleContent,
   submitContent,
 } from "../actions";
@@ -34,19 +40,19 @@ const TABS: ContentStatus[] = ["draft", "pending_approval", "approved", "schedul
 
 export default async function ContentsPage({ searchParams }: PageProps<"/contents">) {
   const { supabase, org } = await requireSession();
-  const { status: rawStatus } = await searchParams;
+  const { status: rawStatus, notice } = await searchParams;
   const status = TABS.includes(rawStatus as ContentStatus) ? (rawStatus as ContentStatus) : "draft";
   const tabs = org.settings.approval_required ? TABS : TABS.filter((t) => t !== "pending_approval");
 
   const { data } = await supabase
     .from("contents")
-    .select("*, account:accounts(*), posts(id, platform_post_id)")
+    .select("*, account:accounts(*), posts(id, platform_post_id, method)")
     .eq("status", status)
     .order(status === "scheduled" ? "scheduled_at" : "updated_at", { ascending: status === "scheduled" })
     .limit(50);
   const contents = (data ?? []) as (Content & {
     account: Account;
-    posts: { id: string; platform_post_id: string | null }[];
+    posts: { id: string; platform_post_id: string | null; method: string }[];
   })[];
   const { data: accountRows } = await supabase.from("accounts").select("*").order("created_at");
 
@@ -56,6 +62,9 @@ export default async function ContentsPage({ searchParams }: PageProps<"/content
       <div className="mb-4">
         <RewriteForm accounts={(accountRows ?? []) as Account[]} />
       </div>
+      {notice ? (
+        <p className="mb-4 rounded-xl bg-white p-3 text-sm shadow-sm">{String(notice)}</p>
+      ) : null}
       <div className="mb-5 flex flex-wrap gap-2">
         {tabs.map((t) => (
           <Link key={t} href={`/contents?status=${t}`} className={t === status ? activeTabClass : tabClass}>
@@ -69,7 +78,9 @@ export default async function ContentsPage({ searchParams }: PageProps<"/content
       ) : (
         <div className="grid gap-3">
           {contents.map((c) => {
-            const viaApi = publishesViaApi(c.account.platform, c.variant);
+            const viaBuffer = canSendToBuffer(c);
+            const viaApi = !viaBuffer && publishesViaApi(c.account.platform, c.variant);
+            const bufferPending = c.posts.some((p) => p.method === "buffer" && !p.platform_post_id);
             const format = formatOfVariant(c.variant);
             return (
               <Card key={c.id}>
@@ -83,7 +94,11 @@ export default async function ContentsPage({ searchParams }: PageProps<"/content
                   {c.scheduled_at ? (
                     <span className={chipClass}>定时 {new Date(c.scheduled_at).toLocaleString("zh-CN")}</span>
                   ) : null}
-                  {!viaApi ? <span className={chipClass}>发布包 · 人工发</span> : null}
+                  {viaBuffer ? (
+                    <span className={chipClass}>经 Buffer 发布</span>
+                  ) : !viaApi ? (
+                    <span className={chipClass}>发布包 · 人工发</span>
+                  ) : null}
                 </div>
                 {status === "scheduled" && viaApi && c.posts.some((p) => !p.platform_post_id) ? (
                   <form
@@ -97,6 +112,20 @@ export default async function ContentsPage({ searchParams }: PageProps<"/content
                     </button>
                     <button name="outcome" value="not_published" className={ghostButtonClass}>
                       没发出，重新排队
+                    </button>
+                  </form>
+                ) : null}
+                {status === "approved" && bufferPending ? (
+                  <form
+                    action={resolveUncertainBuffer.bind(null, c.id)}
+                    className="mb-2 flex flex-wrap items-center gap-2 rounded-xl bg-warn-soft p-3 text-sm text-warn"
+                  >
+                    <span>交给 Buffer 时中断，结果不确定，不会重发。请到 Buffer 看看有没有这条：</span>
+                    <button name="outcome" value="in_buffer" className={ghostButtonClass}>
+                      Buffer 里有
+                    </button>
+                    <button name="outcome" value="not_in_buffer" className={ghostButtonClass}>
+                      没有，可以重新发
                     </button>
                   </form>
                 ) : null}
@@ -141,7 +170,32 @@ export default async function ContentsPage({ searchParams }: PageProps<"/content
                       <button className={buttonClass}>批准</button>
                     </form>
                   ) : null}
-                  {status === "approved" ? (
+                  {status === "approved" && viaBuffer && !bufferPending ? (
+                    <div className="grid w-full gap-2">
+                      <form action={saveMediaUrls.bind(null, c.id)} className="flex flex-wrap items-center gap-2">
+                        <textarea
+                          name="media_urls"
+                          defaultValue={c.media_urls.join("\n")}
+                          rows={2}
+                          placeholder={`图片地址，每行一个，要公开的 https 链接${c.account.platform === "instagram" ? "（Instagram 至少一张）" : "（可选）"}`}
+                          className={`${inputClass} min-w-64 flex-1`}
+                        />
+                        <button className={ghostButtonClass}>保存图片</button>
+                      </form>
+                      <form action={sendContentToBuffer.bind(null, c.id)} className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm text-muted">交给 Buffer：</span>
+                        {Object.entries(BUFFER_ACTIONS).map(([action, label]) => (
+                          <button key={action} name="action" value={action} className={action === "queue" ? buttonClass : ghostButtonClass}>
+                            {label}
+                          </button>
+                        ))}
+                        <button formAction={sendContentToTelegram.bind(null, c.id)} className={ghostButtonClass}>
+                          推到 Telegram，在 TG 里选
+                        </button>
+                      </form>
+                    </div>
+                  ) : null}
+                  {status === "approved" && !viaBuffer ? (
                     <form action={scheduleContent.bind(null, c.id)} className="flex items-center gap-2">
                       <input type="datetime-local" name="scheduled_at" required className={`${inputClass} w-auto`} />
                       <TzOffsetInput />
@@ -151,7 +205,7 @@ export default async function ContentsPage({ searchParams }: PageProps<"/content
                   {status === "scheduled" && !viaApi ? (
                     <form action={markPublishedManually.bind(null, c.id)} className="flex items-center gap-2">
                       <input name="url" placeholder="发布后的链接（可选）" className={`${inputClass} w-64`} />
-                      <button className={buttonClass}>已人工发布</button>
+                      <button className={buttonClass}>{viaBuffer ? "Buffer 已发出" : "已人工发布"}</button>
                     </form>
                   ) : null}
                   {["pending_approval", "approved", "scheduled"].includes(status) ? (

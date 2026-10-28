@@ -7,4 +7,5 @@ export const EVENTS = {
   topicsRequested: "topics/plan.requested",
   contentsRequested: "contents/generate.requested",
   sourceRequested: "sources/transcribe.requested",
+  telegramNote: "telegram/note.received",
 } as const;
