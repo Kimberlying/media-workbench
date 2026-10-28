@@ -6,13 +6,14 @@ import { formatOfVariant } from "@/lib/content/formats";
 import { checkXPost } from "@/lib/content/x-post";
 import { requireEnv } from "@/lib/env";
 import { EVENTS, inngest } from "@/inngest/client";
+import { replaceImage } from "@/lib/media/image";
 import { saveNote } from "@/lib/pipeline/telegram";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { confirmNowKeyboard, parseCallback, reviewKeyboard, TelegramBot } from "@/lib/telegram/bot";
 
 // Telegram 的 webhook，只认 setWebhook 时设的 secret_token 和 TELEGRAM_CHAT_ID 这个对话：
 // - 发文字或语音：存成笔记，后台写成 X、Substack、LinkedIn 三份推回来审核
-// - 回复某条审核消息：用回复的文字替换那条内容的正文，重新推一条审核消息
+// - 回复某条审核消息：用回复的文字替换那条内容的正文，重新推一条审核消息；回复一张图就换配图
 // - 点审核消息上的按钮：交给 Buffer，或登记已手动发布。点按钮就算批准
 // 总是回 200，免得 Telegram 重投；重复的消息和点击也会被唯一索引挡住。
 
@@ -24,6 +25,10 @@ interface Message {
   text?: string;
   voice?: { file_id: string; mime_type?: string; duration?: number };
   audio?: { file_id: string; mime_type?: string; duration?: number };
+  /** 同一张图的几种尺寸，最后一个最大 */
+  photo?: { file_id: string }[];
+  /** 当文件发的图（不压缩） */
+  document?: { file_id: string; mime_type?: string };
   reply_to_message?: { message_id: number };
 }
 
@@ -77,12 +82,22 @@ async function onMessage(db: Db, bot: TelegramBot, chatId: string, message: Mess
     return;
   }
 
-  if (message.reply_to_message && text) {
+  const picture = message.photo?.at(-1)?.file_id ??
+    (message.document?.mime_type?.startsWith("image/") ? message.document.file_id : undefined);
+  if (message.reply_to_message && (text || picture)) {
     const content = await loadContent(db, { telegram_message_id: message.reply_to_message.message_id });
-    if (content) {
+    if (content && picture) {
+      await swapImage(db, bot, content, picture, message.document?.mime_type, message.message_id);
+      return;
+    }
+    if (content && text) {
       await editContent(db, bot, content, text, message.message_id);
       return;
     }
+  }
+  if (picture) {
+    await bot.send("要换配图的话，回复那条稿子发这张图。", undefined, message.message_id);
+    return;
   }
 
   const audio = message.voice ?? message.audio;
@@ -126,6 +141,29 @@ async function editContent(db: Db, bot: TelegramBot, content: BufferContent, bod
   await bot.setKeyboard(content.telegram_message_id!, []);
   const messageId = await bot.sendReview({ ...content, body, pack });
   await db.from("contents").update({ telegram_message_id: messageId }).eq("id", content.id);
+  revalidatePath("/contents");
+}
+
+/** 回复一张图 = 换配图（比如在 ChatGPT 里做的）：同一篇的稿子都换上，重新推这一条 */
+async function swapImage(
+  db: Db,
+  bot: TelegramBot,
+  content: BufferContent,
+  fileId: string,
+  mimeType: string | undefined,
+  replyTo: number,
+) {
+  if (!["draft", "pending_approval", "approved"].includes(content.status)) {
+    await bot.send("这条已经交给 Buffer 或发出去了，换不了图。", undefined, replyTo);
+    return;
+  }
+  const bytes = await bot.download(fileId);
+  const { url, count } = await replaceImage(db, content, { bytes, mimeType: mimeType || "image/jpeg" });
+  await bot.setKeyboard(content.telegram_message_id!, []);
+  const fresh = { ...content, media_urls: [url, ...content.media_urls.slice(1)] };
+  const messageId = await bot.sendReview(fresh);
+  await db.from("contents").update({ telegram_message_id: messageId }).eq("id", content.id);
+  if (count > 1) await bot.send(`同一篇的 ${count} 条稿子都换成了这张图，交给 Buffer 时会带上。`, undefined, messageId);
   revalidatePath("/contents");
 }
 

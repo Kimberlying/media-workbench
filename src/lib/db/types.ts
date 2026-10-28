@@ -37,6 +37,8 @@ export interface OrgSettings {
   approval_required: boolean;
   languages?: string[];
   platforms?: Platform[];
+  /** Telegram 线配图用谁出：gemini（默认）/ openai / off */
+  image_provider?: "gemini" | "openai" | "off";
 }
 
 export interface Org {

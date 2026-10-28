@@ -5,7 +5,9 @@
 - X 和 LinkedIn：消息下面有「存草稿 / 进入队列 / 队列置顶 / 现在发送」，点了就交给 Buffer（现在发送要再点一次确认）。
 - 要改：直接回复那条消息，发改好的全文，会重新发一条给你审。
 - Substack：发的是复制包（第一行是标题，下面附封面图链接），复制贴进 Substack 编辑器发布，再点「已手动发布」。Substack 没有发布接口，只能这样。
-- 配图：X 和 LinkedIn 交给 Buffer 时自动带上。图出不来不影响发稿，机器人会说一声。不想要图就加环境变量 `GEMINI_IMAGE_MODEL=off`。
+- 配图：默认用 Gemini 出，X 和 LinkedIn 交给 Buffer 时自动带上。图出不来不影响发稿，机器人会说一声。
+  - 在「账号与档案」最上面可以改成 **ChatGPT** 出图或 **不出图**。ChatGPT 会员不能给服务器调用，选 ChatGPT 要另办 OpenAI API key（platform.openai.com，单独充值），填进 `OPENAI_API_KEY`。
+  - 不办 OpenAI key 也能用 ChatGPT 的图：在 ChatGPT 里做好图，在 TG 里**回复那条稿子发这张图**（当图片或当文件发都行），同一篇的几条稿子都会换成这张。
 
 资讯雷达、小红书、公众号、Discord、X 开发者 App 都不用配。
 

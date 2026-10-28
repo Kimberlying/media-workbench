@@ -2,7 +2,8 @@ import { Card, PageHeader, buttonClass, ghostButtonClass, inputClass } from "@/c
 import { BufferClient, type BufferChannel } from "@/lib/buffer/client";
 import type { Account, AccountProfile } from "@/lib/db/types";
 import { requireSession } from "@/lib/session";
-import { addManualAccount, saveProfile, setBufferChannel, setupCreatorTemplate } from "../actions";
+import { IMAGE_PROVIDERS } from "@/lib/media/image";
+import { addManualAccount, saveProfile, setBufferChannel, setImageProvider, setupCreatorTemplate } from "../actions";
 
 /** 配了 BUFFER_API_KEY 时列出 Buffer 里的频道，供每个账号选；读不到就手填频道 id */
 async function loadBufferChannels(): Promise<BufferChannel[] | null> {
@@ -27,7 +28,7 @@ const PLATFORM_LABELS = {
 } as const;
 
 export default async function AccountsPage({ searchParams }: PageProps<"/accounts">) {
-  const { supabase, workspace } = await requireSession();
+  const { supabase, org, workspace } = await requireSession();
   const { error } = await searchParams;
 
   const { data } = await supabase
@@ -69,6 +70,30 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
             </form>
           </Card>
         ) : null}
+        <Card>
+          <form action={setImageProvider} className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">Telegram 线配图用</span>
+            <select
+              name="image_provider"
+              defaultValue={org.settings.image_provider ?? "gemini"}
+              className={`${inputClass} w-auto`}
+            >
+              {Object.entries(IMAGE_PROVIDERS).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <button className={ghostButtonClass}>保存</button>
+          </form>
+          <p className="mt-2 text-sm text-muted">
+            ChatGPT 会员不能给服务器调用，选 ChatGPT 要另办 OpenAI API key（单独计费）。不办也行：在 ChatGPT
+            里做好图，在 Telegram 里回复那条稿子发这张图，就会换上。
+            {org.settings.image_provider === "openai" && !process.env.OPENAI_API_KEY ? (
+              <span className="text-bad"> 现在还没配 OPENAI_API_KEY，出图会失败。</span>
+            ) : null}
+          </p>
+        </Card>
         {accounts.map((a) => (
           <Card key={a.id}>
             <div className="mb-3 flex flex-wrap items-center gap-2">

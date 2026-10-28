@@ -80,6 +80,17 @@ const CREATOR_TEMPLATE: { platform: Platform; field: string; language: string; p
   },
 ];
 
+export async function setImageProvider(formData: FormData) {
+  const { supabase, org } = await requireSession();
+  const provider = z.enum(["gemini", "openai", "off"]).parse(formData.get("image_provider"));
+  const { error } = await supabase
+    .from("orgs")
+    .update({ settings: { ...org.settings, image_provider: provider } })
+    .eq("id", org.id);
+  if (error) redirect(`/accounts?error=${encodeURIComponent(error.message)}`);
+  revalidatePath("/accounts");
+}
+
 export async function setupCreatorTemplate(formData: FormData) {
   const { supabase, org, workspace } = await requireSession();
   const { data: existing } = await supabase.from("accounts").select("platform").eq("workspace_id", workspace.id);

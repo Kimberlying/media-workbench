@@ -7,7 +7,7 @@ import { collectInterests, fetchFeeds, fetchNews, fromGrok, RADAR_SOURCES, saveN
 import { loadDigest, writeDailyPosts } from "@/lib/pipeline/daily";
 import { planTopicsForAccount } from "@/lib/pipeline/topics";
 import { planNote, sendReviews, transcribeNote } from "@/lib/pipeline/telegram";
-import { illustrate } from "@/lib/media/image";
+import { illustrate, imageGenerator } from "@/lib/media/image";
 import { requireEnv } from "@/lib/env";
 import { TelegramBot } from "@/lib/telegram/bot";
 import {
@@ -240,12 +240,14 @@ export const telegramNote = inngest.createFunction(
     await step.run("mark-topic-used", async () => {
       await db.from("topics").update({ status: "used" }).eq("id", plan.topic.id);
     });
-    // 配图出不来不影响发稿：记下原因，稿子照样推回去
-    const imageModel = process.env.GEMINI_IMAGE_MODEL;
+    // 配图出不来不影响发稿：记下原因，稿子照样推回去。用谁出图在「账号与档案」里选
     const image = await step.run("illustrate", async () => {
-      if (imageModel === "off") return { url: null, error: null };
       try {
-        const url = await illustrate(db, ids, { apiKey: requireEnv("GEMINI_API_KEY"), model: imageModel });
+        const { data: org } = await db.from("orgs").select("settings").eq("id", plan.topic.org_id).single();
+        const provider = (org?.settings as Org["settings"] | null)?.image_provider ?? "gemini";
+        const generate = process.env.GEMINI_IMAGE_MODEL === "off" ? null : imageGenerator(provider);
+        if (!generate) return { url: null, error: null };
+        const url = await illustrate(db, ids, generate);
         return { url, error: null };
       } catch (err) {
         return { url: null, error: err instanceof Error ? err.message : String(err) };
