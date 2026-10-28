@@ -27,7 +27,7 @@ describe("模型网关", () => {
       usage: { record: async (u) => void records.push(u) },
     });
 
-    const text = await gw.generate({ orgId: "org-1", step: "copy.x_thread", messages: [], refId: "t-1" });
+    const text = await gw.generate({ orgId: "org-1", step: "radar.x", messages: [], refId: "t-1" });
 
     expect(text).toBe("你好");
     const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
@@ -36,7 +36,7 @@ describe("模型网关", () => {
     expect(records).toEqual([
       {
         org_id: "org-1",
-        step: "copy.x_thread",
+        step: "radar.x",
         model: "grok",
         input_tokens: 100,
         output_tokens: 40,
@@ -135,7 +135,7 @@ describe("模型网关", () => {
       providers: directProviders({ XAI_API_KEY: "xai-key", GEMINI_API_KEY: "g-key" }),
     });
 
-    await gw.generate({ orgId: null, step: "copy.x_post", messages: [] });
+    await gw.generate({ orgId: null, step: "radar.x", messages: [] });
     await gw.generate({ orgId: null, step: "copy.post", messages: [] });
 
     const calls = fetch.mock.calls as unknown as [string, RequestInit][];

@@ -13,15 +13,12 @@
 | 东西 | 去哪拿 | 环境变量 |
 | --- | --- | --- |
 | Supabase 项目 | supabase.com 新建项目，按文件名顺序跑 `supabase/migrations/` 里全部 SQL | `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`、`SUPABASE_SERVICE_ROLE_KEY` |
-| Gemini key（付费档） | aistudio.google.com → Get API key，绑结算账号。转写语音、整理笔记、写 Substack 和 LinkedIn 都用它 | `GEMINI_API_KEY` |
-| xAI key | console.x.ai → API Keys，充 5–10 美元。写 X 中文短推用 Grok | `XAI_API_KEY` |
+| Gemini key（付费档） | aistudio.google.com → Get API key，绑结算账号。转写语音、整理笔记、写 X、Substack、LinkedIn 都用它，只要这一个模型 key | `GEMINI_API_KEY` |
 | Buffer API key | Buffer 里连好 X 和 LinkedIn 频道，Settings → API 生成个人 key | `BUFFER_API_KEY` |
 | Telegram 机器人 | Telegram 找 @BotFather 发 `/newbot`，拿到 token；再给 @userinfobot 发条消息拿到你的 chat id | `TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID` |
 | Vercel + Inngest | vercel.com 用 GitHub 登录导入 `Kimberlying/media-workbench`；项目 Integrations 里加 Inngest，它自动填两个 key | `INNGEST_EVENT_KEY`、`INNGEST_SIGNING_KEY` |
 
 自己生成、不用注册的：`TELEGRAM_WEBHOOK_SECRET`、`TOKEN_ENCRYPTION_KEY`、`DIGEST_TOKEN`（终端跑 `openssl rand -hex 32`，各生成一个）。`APP_URL` 填 Vercel 给的域名。
-
-不想办 xAI：在 Vercel 加一行 `LLM_MODEL_OVERRIDES={"copy.x_post":"gemini-flash"}`，X 短推也改用 Gemini 写。
 
 ## 步骤
 

@@ -22,8 +22,9 @@ const DEFAULT_MODELS: Record<Step, string> = {
   "source.digest": "gemini-flash",
   "topics.plan": "gemini-flash",
   "copy.post": "gemini-flash",
-  "copy.x_post": "grok",
-  "copy.x_thread": "grok",
+  // X 短推和推文串也用 Gemini（2026-10-28 kim 定）：只办一个模型 key 就能跑；想换回 Grok 用 LLM_MODEL_OVERRIDES
+  "copy.x_post": "gemini-flash",
+  "copy.x_thread": "gemini-flash",
   "copy.longform": "gemini-flash",
   "copy.xhs_pack": "gemini-flash",
   "review.summary": "gemini-flash",

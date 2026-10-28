@@ -60,7 +60,7 @@ python3 scripts/render_cards.py <发布包>/cards/cards.json --output-dir <发�
 1. 安装依赖：`npm install`
 2. 复制环境变量：`cp .env.example .env.local`，按注释填好
 3. 建 Supabase 项目，执行 `supabase/migrations/` 下的 SQL（Supabase CLI：`supabase link` 后 `supabase db push`；或直接粘到 SQL Editor）。Authentication → URL Configuration 里把 `{APP_URL}/auth/callback` 加进 Redirect URLs
-4. 模型：填好 `XAI_API_KEY` 和 `GEMINI_API_KEY` 就能用，可以跑 `npm run check:models` 用真 key 核对一遍（会花几分钱）。想走 LiteLLM 时见 `litellm/config.yaml` 顶部的命令
+4. 模型：填好 `GEMINI_API_KEY` 就能用（`XAI_API_KEY` 可选，只给资讯雷达搜 X），可以跑 `npm run check:models` 用真 key 核对一遍（会花几分钱）。想走 LiteLLM 时见 `litellm/config.yaml` 顶部的命令
 5. 启动 Inngest 本地开发服务：`npx inngest-cli@latest dev -u http://localhost:3000/api/inngest`
 6. 启动应用：`npm run dev`，打开 http://localhost:3000 用邮箱登录。首次登录自动创建你的自用组织和工作区
 

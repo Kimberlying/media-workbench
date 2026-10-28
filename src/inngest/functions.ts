@@ -39,7 +39,9 @@ export const radarDaily = inngest.createFunction(
     let saved = await step.run("save-feeds", () => saveNews(db, feedItems));
 
     const interests = await step.run("collect-interests", () => collectInterests(db));
-    for (const source of interests.length > 0 ? RADAR_SOURCES : []) {
+    // Grok 搜 X 要 xAI key；没配就只跑固定信源
+    const searchX = interests.length > 0 && Boolean(process.env.XAI_API_KEY);
+    for (const source of searchX ? RADAR_SOURCES : []) {
       const items = await step.run(`fetch-${source.source}`, () =>
         fetchNews(getGateway(), interests, source),
       );
