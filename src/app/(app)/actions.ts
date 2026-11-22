@@ -19,6 +19,8 @@ import { loadKnowledge } from "@/lib/pipeline/copywriting";
 import { requireSession } from "@/lib/session";
 import { requireEnv } from "@/lib/env";
 import { TelegramBot } from "@/lib/telegram/bot";
+import { sendXhsPack } from "@/lib/telegram/xhs";
+import { renderCards } from "@/lib/cards/render";
 import { detectPlatform, normalizeSourceUrl, SUPPORTED_HINT } from "@/lib/sources/platforms";
 import type { SourceDigest } from "@/lib/sources/schema";
 import { EVENTS, inngest } from "@/inngest/client";
@@ -623,6 +625,31 @@ export async function sendContentToTelegram(contentId: string) {
     .eq("id", content.id);
   if (error) throw new Error(error.message);
   backToContents("approved", "已推到 Telegram，在 TG 里选怎么交给 Buffer");
+}
+
+/** 小红书发布包推到 Telegram：卡片成相册，标题、正文、话题分开发，手机上存图、复制、粘贴到小红书 */
+export async function sendXhsPackToTelegram(contentId: string) {
+  const content = await loadBufferContent(contentId);
+  const pack = content.pack;
+  if (pack?.kind !== "xhs") backToContents("approved", "只有小红书内容包能这样推");
+  if (content.status !== "approved") backToContents("approved", "只有已批准的内容可以推到 Telegram");
+  const bot = new TelegramBot({ token: requireEnv("TELEGRAM_BOT_TOKEN"), chatId: requireEnv("TELEGRAM_CHAT_ID") });
+  let notice: string;
+  try {
+    const rendered = await renderCards(pack.cards);
+    const images = pack.cards.cards.map((c) => ({ name: c.file, png: rendered[c.file] }));
+    const messageId = await sendXhsPack(bot, content, pack, images);
+    // 「已手动发布」按钮只认最新推的这一条
+    const { error } = await createAdminClient()
+      .from("contents")
+      .update({ telegram_message_id: messageId })
+      .eq("id", content.id);
+    if (error) throw new Error(error.message);
+    notice = "发布包已推到 Telegram：存图、复制标题正文去小红书发，发完在 TG 里点「已手动发布」";
+  } catch (err) {
+    notice = `推到 Telegram 没成功：${err instanceof Error ? err.message : String(err)}`;
+  }
+  backToContents("approved", notice);
 }
 
 /** 交给 Buffer 时中断：到 Buffer 看过之后在这里登记 */
