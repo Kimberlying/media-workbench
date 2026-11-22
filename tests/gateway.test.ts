@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { LlmGateway, type UsageRecord } from "@/lib/llm/gateway";
 import { costOf, modelFor } from "@/lib/llm/models";
-import { directProviders } from "@/lib/llm/providers";
+import { parseModel } from "@/lib/llm/catalog";
+import { filterChatModels } from "@/lib/llm/list-models";
 
 function fakeFetch(content: string, cost = "0.0012") {
   return vi.fn(async () =>
@@ -132,7 +133,7 @@ describe("模型网关", () => {
     const gw = new LlmGateway({
       fetch,
       usage: { record: async (u) => void records.push(u) },
-      providers: directProviders({ XAI_API_KEY: "xai-key", GEMINI_API_KEY: "g-key" }),
+      env: { XAI_API_KEY: "xai-key", GEMINI_API_KEY: "g-key" },
     });
 
     await gw.generate({ orgId: null, step: "radar.x", messages: [] });
@@ -147,9 +148,139 @@ describe("模型网关", () => {
     expect(records[0].cost).toBeCloseTo((100 * 2 + 40 * 6) / 1_000_000);
   });
 
-  it("别名既没有直连 key 也没有 LiteLLM 时报错说清缺什么", async () => {
-    const gw = new LlmGateway({ usage: { record: async () => {} }, providers: directProviders({ XAI_API_KEY: "k" }) });
-    await expect(gw.generate({ orgId: null, step: "copy.post", messages: [] })).rejects.toThrow("gemini-flash");
+  it("没有这家的 key 也没有 LiteLLM 时报错说清缺什么", async () => {
+    const gw = new LlmGateway({ usage: { record: async () => {} }, env: { XAI_API_KEY: "k" } });
+    await expect(gw.generate({ orgId: null, step: "copy.post", messages: [] })).rejects.toThrow("GEMINI_API_KEY");
+  });
+
+  it("工作台里按用途选的模型和贴的 key 优先于环境变量", async () => {
+    const records: UsageRecord[] = [];
+    const fetch = fakeFetch("好", "");
+    const orgConfig = vi.fn(async (orgId: string | null) =>
+      orgId === "org-1"
+        ? { keys: { openai: "sk-ui" }, models: { write: "openai/gpt-test", assist: "gemini-4.0-flash" } }
+        : { keys: {}, models: {} },
+    );
+    const gw = new LlmGateway({
+      fetch,
+      usage: { record: async (u) => void records.push(u) },
+      env: { GEMINI_API_KEY: "g", OPENAI_API_KEY: "sk-env" },
+      orgConfig,
+    });
+    await gw.generate({ orgId: "org-1", step: "copy.post", messages: [] });
+    await gw.generate({ orgId: "org-1", step: "topics.plan", messages: [] });
+    await gw.generate({ orgId: "org-2", step: "copy.post", messages: [] });
+    const calls = fetch.mock.calls as unknown as [string, RequestInit][];
+    expect(calls[0][0]).toBe("https://api.openai.com/v1/chat/completions");
+    expect((calls[0][1].headers as Record<string, string>).authorization).toBe("Bearer sk-ui");
+    // OpenAI 新模型只认默认温度，不传
+    expect(JSON.parse(String(calls[0][1].body)).temperature).toBeUndefined();
+    expect(JSON.parse(String(calls[1][1].body)).model).toBe("gemini-4.0-flash");
+    expect(JSON.parse(String(calls[2][1].body)).model).toBe("gemini-3.8-flash");
+    expect(records.map((r) => r.model)).toEqual(["gpt-test", "gemini-4.0-flash", "gemini-3.8-flash"]);
+  });
+
+  it("调用方指定的模型（账号另选的）优先于工作台设置", async () => {
+    const fetch = fakeFetch("好", "");
+    const gw = new LlmGateway({
+      fetch,
+      usage: { record: async () => {} },
+      env: { GEMINI_API_KEY: "g", XAI_API_KEY: "x" },
+      orgConfig: async () => ({ keys: {}, models: { write: "gemini/gemini-3.8-flash" } }),
+    });
+    await gw.generate({ orgId: "org-1", step: "copy.post", model: "grok-4.7", messages: [] });
+    const calls = fetch.mock.calls as unknown as [string, RequestInit][];
+    expect(calls[0][0]).toBe("https://api.x.ai/v1/chat/completions");
+  });
+
+  it("Claude 走 Anthropic 接口：system 单独传，要 JSON 时提示只输出 JSON，记用量和费用", async () => {
+    const records: UsageRecord[] = [];
+    const fetch = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async () =>
+      new Response(
+        JSON.stringify({
+          id: "msg_1",
+          type: "message",
+          role: "assistant",
+          model: "claude-sonnet-5-5",
+          content: [{ type: "text", text: '好的，结果是：{"n": 7}' }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 1000, output_tokens: 200 },
+        }),
+        { headers: { "content-type": "application/json" } },
+      ),
+    );
+    const gw = new LlmGateway({
+      fetch: fetch as unknown as typeof globalThis.fetch,
+      usage: { record: async (u) => void records.push(u) },
+      env: {},
+      orgConfig: async () => ({ keys: { anthropic: "sk-ant" }, models: { write: "claude-sonnet-5-5" } }),
+    });
+    const out = await gw.generate({
+      orgId: "org-1",
+      step: "copy.post",
+      messages: [
+        { role: "system", content: "你是编辑" },
+        { role: "user", content: "写" },
+      ],
+      json: z.object({ n: z.number() }),
+    });
+    expect(out).toEqual({ n: 7 });
+    const [url, init] = fetch.mock.calls[0];
+    expect(String(url)).toBe("https://api.anthropic.com/v1/messages");
+    const body = JSON.parse(String(init!.body));
+    expect(body.model).toBe("claude-sonnet-5-5");
+    expect(body.system).toContain("你是编辑");
+    expect(body.system).toContain("JSON");
+    expect(body.messages).toEqual([{ role: "user", content: "写" }]);
+    expect(body.temperature).toBeUndefined();
+    expect(records[0]).toMatchObject({ model: "claude-sonnet-5-5", input_tokens: 1000, output_tokens: 200 });
+    expect(records[0].cost).toBeCloseTo((1000 * 2 + 200 * 10) / 1_000_000);
+  });
+
+  it("Claude 拒绝时报清楚的错", async () => {
+    const fetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          id: "msg_2",
+          type: "message",
+          role: "assistant",
+          model: "claude-opus-5-5",
+          content: [],
+          stop_reason: "refusal",
+          usage: { input_tokens: 1, output_tokens: 0 },
+        }),
+        { headers: { "content-type": "application/json" } },
+      ),
+    );
+    const gw = new LlmGateway({
+      fetch: fetch as unknown as typeof globalThis.fetch,
+      usage: { record: async () => {} },
+      env: { ANTHROPIC_API_KEY: "k" },
+    });
+    await expect(
+      gw.generate({ orgId: null, step: "copy.post", model: "anthropic/claude-opus-5-5", messages: [] }),
+    ).rejects.toThrow("拒绝");
+  });
+
+  it("认得出模型是哪家的", () => {
+    expect(parseModel("claude-sonnet-5-5")).toEqual({ provider: "anthropic", model: "claude-sonnet-5-5" });
+    expect(parseModel("gpt-5")).toEqual({ provider: "openai", model: "gpt-5" });
+    expect(parseModel("o4-mini")).toEqual({ provider: "openai", model: "o4-mini" });
+    expect(parseModel("gemini/gemini-3.8-flash")).toEqual({ provider: "gemini", model: "gemini-3.8-flash" });
+    expect(parseModel("openrouter/anthropic/claude-x")).toEqual({ provider: "openrouter", model: "anthropic/claude-x" });
+    expect(parseModel("gemini-flash", { GEMINI_MODEL: "gemini-4" })).toEqual({ provider: "gemini", model: "gemini-4" });
+    expect(parseModel("grok", {})).toEqual({ provider: "xai", model: "grok-4.7" });
+    expect(parseModel("llama-3")).toBeNull();
+    expect(parseModel("foo/bar")).toBeNull();
+  });
+
+  it("模型列表只留写字的对话模型", () => {
+    expect(
+      filterChatModels("openai", ["gpt-x", "gpt-x-audio", "text-embedding-3", "o4-mini", "dall-e-3", "gpt-image-2"]),
+    ).toEqual(["o4-mini", "gpt-x"]);
+    expect(filterChatModels("gemini", ["models/gemini-3.8-flash", "models/text-embedding-004"])).toEqual([
+      "gemini-3.8-flash",
+    ]);
   });
 
   it("没列单价的模型费用记 0", () => {
@@ -161,21 +292,4 @@ describe("模型网关", () => {
     expect(modelFor("copy.post", "不是 JSON")).toBe("gemini-flash");
   });
 
-  it("工作台里填的模型 ID 按组织覆盖直连的默认模型", async () => {
-    const records: UsageRecord[] = [];
-    const fetch = fakeFetch("好", "");
-    const modelIds = vi.fn(async (orgId: string | null) => (orgId === "org-1" ? { "gemini-flash": "gemini-4.0-flash" } : {}));
-    const gw = new LlmGateway({
-      fetch,
-      usage: { record: async (u) => void records.push(u) },
-      providers: directProviders({ GEMINI_API_KEY: "g" }),
-      modelIds,
-    });
-    await gw.generate({ orgId: "org-1", step: "copy.post", messages: [] });
-    await gw.generate({ orgId: "org-2", step: "copy.post", messages: [] });
-    const calls = fetch.mock.calls as unknown as [string, RequestInit][];
-    expect(JSON.parse(String(calls[0][1].body)).model).toBe("gemini-4.0-flash");
-    expect(JSON.parse(String(calls[1][1].body)).model).toBe("gemini-3.8-flash");
-    expect(records.map((r) => r.model)).toEqual(["gemini-4.0-flash", "gemini-3.8-flash"]);
-  });
 });

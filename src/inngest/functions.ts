@@ -1,6 +1,7 @@
 import { getFormat } from "@/lib/content/formats";
 import type { Account, AccountProfile, Org, Topic } from "@/lib/db/types";
-import { getGateway, orgModelIds } from "@/lib/llm";
+import { getGateway, orgLlmConfig } from "@/lib/llm";
+import { parseModel } from "@/lib/llm/catalog";
 import { generateContents } from "@/lib/pipeline/copywriting";
 import { dueContents, publishContent, syncMetrics } from "@/lib/pipeline/publish";
 import { collectInterests, fetchFeeds, fetchNews, fromGrok, RADAR_SOURCES, saveNews } from "@/lib/pipeline/radar";
@@ -211,12 +212,15 @@ export const telegramNote = inngest.createFunction(
     };
     if (voice) {
       await step.run("transcribe", async () => {
-        // 转写和写稿用同一个 Gemini 模型（工作台里改过就用改过的）
+        // 语音转写固定用 Gemini（它能直接听音频）；「整理」选的是 Gemini 模型就用同一个
         const { data: source } = await db.from("sources").select("org_id").eq("id", sourceId).single();
-        const ids = await orgModelIds(source?.org_id ?? null);
+        const config = await orgLlmConfig(source?.org_id ?? null);
+        const assist = parseModel(config.models.assist ?? "");
+        const apiKey = config.keys.gemini || process.env.GEMINI_API_KEY;
+        if (!apiKey) throw new Error("语音转写要 Gemini 的 key：到工作台「模型」页贴一个，或者直接发文字");
         return transcribeNote(db, telegramBot(), sourceId, voice, {
-          apiKey: requireEnv("GEMINI_API_KEY"),
-          model: ids["gemini-flash"] || process.env.GEMINI_MODEL,
+          apiKey,
+          model: assist?.provider === "gemini" ? assist.model : process.env.GEMINI_MODEL,
         });
       });
     }
@@ -248,8 +252,11 @@ export const telegramNote = inngest.createFunction(
       try {
         const { data: org } = await db.from("orgs").select("settings").eq("id", plan.topic.org_id).single();
         const settings = org?.settings as Org["settings"] | null;
+        const { keys } = await orgLlmConfig(plan.topic.org_id);
         const env = {
           ...process.env,
+          GEMINI_API_KEY: keys.gemini || process.env.GEMINI_API_KEY,
+          OPENAI_API_KEY: keys.openai || process.env.OPENAI_API_KEY,
           GEMINI_IMAGE_MODEL: settings?.models?.image || process.env.GEMINI_IMAGE_MODEL,
           OPENAI_IMAGE_MODEL: settings?.models?.openai_image || process.env.OPENAI_IMAGE_MODEL,
         };

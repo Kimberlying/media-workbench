@@ -1,5 +1,5 @@
-// 每个环节用哪个模型。值是模型别名：走 LiteLLM 时见 litellm/config.yaml，直连时见 providers.ts。
-// 换模型只改这里或网关配置，不改业务代码。
+// 每个环节默认用哪个模型。值是旧别名（grok、gemini-flash，见 catalog.ts）或「厂商/模型名」。
+// 平时不用改这里：在工作台「模型」页按用途选模型（写稿、整理），在「账号与档案」里还能给单个账号另选。
 
 export const STEPS = [
   "radar.x", // 资讯雷达：X 热点（Grok 实时搜 X）
@@ -30,6 +30,19 @@ const DEFAULT_MODELS: Record<Step, string> = {
   "review.summary": "gemini-flash",
 };
 
+/** 「模型」页上的两种用途：写稿（各平台文案）和整理（打标签、摘要、选题、复盘）。搜 X 固定用 Grok */
+export type ModelUse = "write" | "assist";
+
+export const MODEL_USES: Record<ModelUse, { label: string; hint: string }> = {
+  write: { label: "写稿", hint: "X、LinkedIn、Substack、长文、小红书等各平台文案" },
+  assist: { label: "整理和选题", hint: "资讯打标签、素材和语音笔记整理、选题、复盘总结；用便宜快的就够" },
+};
+
+export function modelUseOf(step: Step): ModelUse | null {
+  if (step === "radar.x") return null;
+  return step.startsWith("copy.") ? "write" : "assist";
+}
+
 /** 可在界面上手动选的模型：网关里配置的全部别名 */
 export const MODEL_CHOICES = [...new Set(Object.values(DEFAULT_MODELS))];
 
@@ -47,11 +60,15 @@ export function modelFor(step: Step, overrides = process.env.LLM_MODEL_OVERRIDES
 }
 
 // 直连（不经过 LiteLLM）时按这里的单价记费用，美元 / 百万 token。没列的模型记 0。
-// 来源：docs.x.ai/developers/pricing、ai.google.dev/gemini-api/docs/pricing（2026-10 查）。
+// 来源：docs.x.ai/developers/pricing、ai.google.dev/gemini-api/docs/pricing（2026-10 查）、platform.claude.com 价目。
 // Grok 搜 X 另按抓到的帖子计费（每千条 5 美元），这里没算进去。
 const PRICES: Record<string, { input: number; output: number }> = {
   "grok-4.7": { input: 2, output: 6 },
   "gemini-3.8-flash": { input: 0.75, output: 3.75 }, // 2027-01-01 起涨到 1.5 / 7.5
+  // Anthropic 官方价（2026-11 查）
+  "claude-opus-5-5": { input: 4, output: 20 },
+  "claude-sonnet-5-5": { input: 2, output: 10 },
+  "claude-haiku-5-5": { input: 0.1, output: 0.5 },
 };
 
 export function costOf(model: string, inputTokens: number, outputTokens: number): number {

@@ -47,7 +47,7 @@ describe("Gemini 配图", () => {
 
   it("不出图返回 null；选了 ChatGPT 没配 key 时说清楚", () => {
     expect(imageGenerator("off", {})).toBeNull();
-    expect(() => imageGenerator("openai", {})).toThrow("OPENAI_API_KEY");
+    expect(() => imageGenerator("openai", {})).toThrow("OpenAI 的 key");
     expect(imageGenerator("gemini", { GEMINI_API_KEY: "g" })).toBeTypeOf("function");
   });
 });

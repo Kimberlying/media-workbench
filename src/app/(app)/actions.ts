@@ -3,17 +3,18 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { BUFFER_ACTIONS, BufferRejected, type BufferAction } from "@/lib/buffer/client";
+import { BUFFER_ACTIONS, BufferClient, BufferRejected, type BufferAction } from "@/lib/buffer/client";
 import { bufferProblem, sendToBuffer, type BufferContent } from "@/lib/buffer/send";
 import { checkTabooWords } from "@/lib/content/compliance";
 import { getFormat, variantOf } from "@/lib/content/formats";
 import { rewriteMaterial, type RewriteMode } from "@/lib/content/x-post";
 import { getGateway } from "@/lib/llm";
 import { MODEL_CHOICES } from "@/lib/llm/models";
+import { MODEL_SPEC, parseModel } from "@/lib/llm/catalog";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ContentPack } from "@/lib/xhs/schema";
 import { assertTransition } from "@/lib/content/status";
-import type { ContentStatus, KnowledgeType, Platform } from "@/lib/db/types";
+import type { AccountProfile, ContentStatus, KnowledgeType, Platform } from "@/lib/db/types";
 import { weekStart } from "@/lib/dates";
 import { loadKnowledge } from "@/lib/pipeline/copywriting";
 import { requireSession } from "@/lib/session";
@@ -44,12 +45,95 @@ export async function addManualAccount(formData: FormData) {
   const handle = String(formData.get("handle") ?? "").replace(/^@/, "").trim();
   if (!handle) redirect("/accounts?error=请填写账号名");
 
-  const { error } = await supabase.from("accounts").insert({
-    org_id: org.id,
-    workspace_id: workspace.id,
-    platform,
-    handle,
-  });
+  const error = await insertAccount(supabase, { org_id: org.id, workspace_id: workspace.id, platform, handle });
+  if (error) redirect(`/accounts?error=${encodeURIComponent(error)}`);
+  revalidatePath("/accounts");
+}
+
+type SessionClient = Awaited<ReturnType<typeof requireSession>>["supabase"];
+
+/**
+ * 加一个账号。同平台已有账号时，把最早那个号的档案复制一份过来（定位、语气、禁用词），
+ * 新号马上能写稿，之后再按这个号改。返回错误信息，成功返回 null
+ */
+async function insertAccount(
+  supabase: SessionClient,
+  account: { org_id: string; workspace_id: string; platform: Platform; handle: string; buffer_channel_id?: string },
+): Promise<string | null> {
+  const { data: sibling } = await supabase
+    .from("accounts")
+    .select("profile:account_profiles(*)")
+    .eq("workspace_id", account.workspace_id)
+    .eq("platform", account.platform)
+    .not("profile_id", "is", null)
+    .order("created_at")
+    .limit(1)
+    .maybeSingle();
+  let profileId: string | null = null;
+  const source = (sibling?.profile ?? null) as unknown as AccountProfile | null;
+  if (source) {
+    const { org_id, positioning, audience, tone, taboo, benchmarks, language } = source;
+    const { data: created, error } = await supabase
+      .from("account_profiles")
+      .insert({ org_id, positioning, audience, tone, taboo, benchmarks, language })
+      .select("id")
+      .single();
+    if (error) return error.message;
+    profileId = created.id;
+  }
+  const { error } = await supabase.from("accounts").insert({ ...account, profile_id: profileId });
+  if (error) return error.code === "23505" ? `${account.platform} @${account.handle} 已经加过了` : error.message;
+  return null;
+}
+
+/** Buffer 里的频道类型 → 工作台平台；对不上的不导入 */
+const BUFFER_SERVICES: Record<string, Platform> = {
+  twitter: "x",
+  x: "x",
+  linkedin: "linkedin",
+  instagram: "instagram",
+  facebook: "facebook",
+  threads: "threads",
+};
+
+/** 一键把 Buffer 里还没绑账号的频道都加成账号，并绑好频道 */
+export async function importBufferChannels() {
+  const { supabase, org, workspace } = await requireSession();
+  const channels = await new BufferClient(requireEnv("BUFFER_API_KEY")).channels();
+  const { data: existing } = await supabase.from("accounts").select("buffer_channel_id");
+  const bound = new Set((existing ?? []).map((a) => a.buffer_channel_id).filter(Boolean));
+  const added: string[] = [];
+  const problems: string[] = [];
+  for (const ch of channels) {
+    const platform = BUFFER_SERVICES[ch.service.toLowerCase()];
+    if (!platform || bound.has(ch.id)) continue;
+    const handle = ch.name.replace(/^@/, "").trim() || ch.id;
+    const error = await insertAccount(supabase, {
+      org_id: org.id,
+      workspace_id: workspace.id,
+      platform,
+      handle,
+      buffer_channel_id: ch.id,
+    });
+    if (error) problems.push(error);
+    else added.push(`${platform} @${handle}`);
+  }
+  revalidatePath("/accounts");
+  if (problems.length) redirect(`/accounts?error=${encodeURIComponent(problems.join("；"))}`);
+  redirect(`/accounts?notice=${encodeURIComponent(added.length ? `导入了 ${added.join("、")}` : "Buffer 里的频道都已经加过了")}`);
+}
+
+/** 每个账号：Telegram 线写不写它、写稿另用哪个模型 */
+export async function saveAccountOptions(accountId: string, formData: FormData) {
+  const { supabase } = await requireSession();
+  const model = String(formData.get("model") ?? "").trim() || null;
+  if (model && (!MODEL_SPEC.test(model) || (!parseModel(model) && !process.env.LLM_GATEWAY_URL))) {
+    redirect(`/accounts?error=${encodeURIComponent(`看不出「${model}」是哪家的模型：写成「厂商/模型名」，例如 anthropic/claude-sonnet-5-5`)}`);
+  }
+  const { error } = await supabase
+    .from("accounts")
+    .update({ telegram_enabled: formData.get("telegram_enabled") === "on", model })
+    .eq("id", accountId);
   if (error) redirect(`/accounts?error=${encodeURIComponent(error.message)}`);
   revalidatePath("/accounts");
 }
@@ -79,27 +163,6 @@ const CREATOR_TEMPLATE: { platform: Platform; field: string; language: string; p
     tone: "Professional but personal; lead with the insight, back it with specifics; no buzzwords",
   },
 ];
-
-/** 模型 ID 只收字母、数字和 . - _ :，空着就用默认 */
-const MODEL_ID = /^[A-Za-z0-9._:-]{1,80}$/;
-
-export async function saveModelSettings(formData: FormData) {
-  const { supabase, org } = await requireSession();
-  const models: Record<string, string> = {};
-  for (const key of ["text", "image", "openai_image"] as const) {
-    const value = String(formData.get(key) ?? "").trim();
-    if (!value) continue;
-    if (!MODEL_ID.test(value)) redirect(`/accounts?error=${encodeURIComponent(`模型名「${value}」不对，只能有字母、数字和 . - _ :`)}`);
-    models[key] = value;
-  }
-  const provider = z.enum(["gemini", "openai", "off"]).parse(formData.get("image_provider") ?? "gemini");
-  const { error } = await supabase
-    .from("orgs")
-    .update({ settings: { ...org.settings, image_provider: provider, models } })
-    .eq("id", org.id);
-  if (error) redirect(`/accounts?error=${encodeURIComponent(error.message)}`);
-  revalidatePath("/accounts");
-}
 
 export async function setupCreatorTemplate(formData: FormData) {
   const { supabase, org, workspace } = await requireSession();

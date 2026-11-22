@@ -89,17 +89,26 @@ export interface NotePlan {
   targets: { account: Account; profile: AccountProfile; formatId: string }[];
 }
 
-/** 整理好的笔记 → 一个选题 + 模板里有档案的账号；一个账号都没有时返回 null */
+/** 笔记开头的 @账号名（可以几个）：只给这几个号写。返回小写的账号名 */
+export function mentionedHandles(text: string): string[] {
+  const head = text.trimStart().match(/^((?:@[\w.-]+[\s,，、]*)+)/);
+  if (!head) return [];
+  return [...head[1].matchAll(/@([\w.-]+)/g)].map((m) => m[1].toLowerCase());
+}
+
+/** 整理好的笔记 → 一个选题 + 要写的账号；一个账号都没有时返回 null。
+ *  同一平台有几个号就写几份（每个号按自己的档案写），账号页里关掉「Telegram 线」的号不写；
+ *  笔记开头写了 @账号名 就只写这几个号 */
 export async function planNote(db: SupabaseClient, sourceId: string): Promise<NotePlan | null> {
   const { data: source, error } = await db
     .from("sources")
-    .select("id, org_id, workspace_id, title, digest")
+    .select("id, org_id, workspace_id, title, digest, transcript")
     .eq("id", sourceId)
     .single();
   if (error) throw new Error(error.message);
-  const { org_id, workspace_id, title, digest } = source as Pick<
+  const { org_id, workspace_id, title, digest, transcript } = source as Pick<
     Source,
-    "id" | "org_id" | "workspace_id" | "title" | "digest"
+    "id" | "org_id" | "workspace_id" | "title" | "digest" | "transcript"
   >;
 
   const { data: rows, error: accError } = await db
@@ -109,14 +118,15 @@ export async function planNote(db: SupabaseClient, sourceId: string): Promise<No
     .in("platform", Object.keys(CREATOR_FORMATS))
     .order("created_at", { ascending: true });
   if (accError) throw new Error(accError.message);
-  const seen = new Set<string>();
-  const targets = (rows ?? []).flatMap((row) => {
+  const all = (rows ?? []).flatMap((row) => {
     const { profile, ...account } = row as Account & { profile: AccountProfile | null };
-    // 每个平台只写一个账号（最早建的那个）
-    if (!profile || seen.has(account.platform)) return [];
-    seen.add(account.platform);
+    if (!profile) return [];
     return [{ account: account as Account, profile, formatId: getFormat(CREATOR_FORMATS[account.platform]!).id }];
   });
+  const wanted = mentionedHandles(transcript?.[0]?.text ?? "");
+  const picked = wanted.length ? all.filter((t) => wanted.includes(t.account.handle.toLowerCase())) : [];
+  // 点了名就只写点到的号（点的名一个都对不上时当没点）；没点名就写所有开着 Telegram 线的号
+  const targets = picked.length ? picked : all.filter((t) => t.account.telegram_enabled !== false);
   if (targets.length === 0) return null;
 
   const angle = digest?.angles[0];
