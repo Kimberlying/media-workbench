@@ -111,7 +111,7 @@ async function onMessage(db: Db, bot: TelegramBot, chatId: string, message: Mess
 async function editContent(db: Db, bot: TelegramBot, content: BufferContent, body: string, replyTo: number) {
   const format = formatOfVariant(content.variant);
   if (format.kind !== "text") {
-    await bot.send("长文请到工作台「内容」里改，改完点「推到 Telegram」。", undefined, replyTo);
+    await bot.send("长文和小红书包请到工作台「内容」里改，改完再点「推到 Telegram」。", undefined, replyTo);
     return;
   }
   if (!["draft", "pending_approval", "approved"].includes(content.status)) {

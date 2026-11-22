@@ -32,6 +32,7 @@ import {
   saveMediaUrls,
   sendContentToBuffer,
   sendContentToTelegram,
+  sendXhsPackToTelegram,
   scheduleContent,
   submitContent,
 } from "../actions";
@@ -200,6 +201,11 @@ export default async function ContentsPage({ searchParams }: PageProps<"/content
                       <input type="datetime-local" name="scheduled_at" required className={`${inputClass} w-auto`} />
                       <TzOffsetInput />
                       <button className={buttonClass}>{viaApi ? "定时发布" : "排期"}</button>
+                    </form>
+                  ) : null}
+                  {status === "approved" && c.pack?.kind === "xhs" ? (
+                    <form action={sendXhsPackToTelegram.bind(null, c.id)}>
+                      <button className={buttonClass}>推到 Telegram，手机上发小红书</button>
                     </form>
                   ) : null}
                   {status === "scheduled" && !viaApi ? (

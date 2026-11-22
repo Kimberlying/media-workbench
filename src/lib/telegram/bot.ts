@@ -129,6 +129,47 @@ export class TelegramBot {
     return messageId;
   }
 
+  /** 发 HTML 格式的消息：<code> 点一下复制，<pre> 代码块带复制按钮 */
+  async sendHtml(html: string, replyMarkup?: { inline_keyboard: Button[][] }): Promise<number> {
+    const message = await this.call<{ message_id: number }>("sendMessage", {
+      chat_id: this.config.chatId,
+      text: html,
+      parse_mode: "HTML",
+      link_preview_options: { is_disabled: true },
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+    });
+    return message.message_id;
+  }
+
+  /** 上传图片：一张用 sendPhoto，2 到 10 张用 sendMediaGroup 成一组相册 */
+  async sendPhotos(images: { name: string; png: Uint8Array }[]): Promise<void> {
+    if (images.length === 0) return;
+    if (images.length > 10) throw new Error("Telegram 一组相册最多 10 张");
+    const form = new FormData();
+    form.append("chat_id", this.config.chatId);
+    const blob = (png: Uint8Array) => new Blob([png as BlobPart], { type: "image/png" });
+    if (images.length === 1) {
+      form.append("photo", blob(images[0].png), images[0].name);
+      await this.upload("sendPhoto", form);
+      return;
+    }
+    form.append(
+      "media",
+      JSON.stringify(images.map((_, i) => ({ type: "photo", media: `attach://p${i}` }))),
+    );
+    images.forEach((img, i) => form.append(`p${i}`, blob(img.png), img.name));
+    await this.upload("sendMediaGroup", form);
+  }
+
+  private async upload(method: string, form: FormData): Promise<void> {
+    const res = await (this.config.fetch ?? fetch)(`${API}/bot${this.config.token}/${method}`, {
+      method: "POST",
+      body: form,
+    });
+    const body = (await res.json()) as { ok: boolean; description?: string };
+    if (!body.ok) throw new Error(`Telegram ${method} 失败：${body.description ?? res.status}`);
+  }
+
   async send(text: string, replyMarkup?: { inline_keyboard: Button[][] }, replyTo?: number): Promise<number> {
     const message = await this.call<{ message_id: number }>("sendMessage", {
       chat_id: this.config.chatId,
