@@ -1,12 +1,13 @@
 import { getFormat } from "@/lib/content/formats";
 import type { Account, AccountProfile, Org, Topic } from "@/lib/db/types";
-import { getGateway } from "@/lib/llm";
+import { getGateway, orgModelIds } from "@/lib/llm";
 import { generateContents } from "@/lib/pipeline/copywriting";
 import { dueContents, publishContent, syncMetrics } from "@/lib/pipeline/publish";
 import { collectInterests, fetchFeeds, fetchNews, fromGrok, RADAR_SOURCES, saveNews } from "@/lib/pipeline/radar";
 import { loadDigest, writeDailyPosts } from "@/lib/pipeline/daily";
 import { planTopicsForAccount } from "@/lib/pipeline/topics";
 import { planNote, sendReviews, transcribeNote } from "@/lib/pipeline/telegram";
+import { illustrate, imageGenerator } from "@/lib/media/image";
 import { requireEnv } from "@/lib/env";
 import { TelegramBot } from "@/lib/telegram/bot";
 import {
@@ -39,7 +40,9 @@ export const radarDaily = inngest.createFunction(
     let saved = await step.run("save-feeds", () => saveNews(db, feedItems));
 
     const interests = await step.run("collect-interests", () => collectInterests(db));
-    for (const source of interests.length > 0 ? RADAR_SOURCES : []) {
+    // Grok 搜 X 要 xAI key；没配就只跑固定信源
+    const searchX = interests.length > 0 && Boolean(process.env.XAI_API_KEY);
+    for (const source of searchX ? RADAR_SOURCES : []) {
       const items = await step.run(`fetch-${source.source}`, () =>
         fetchNews(getGateway(), interests, source),
       );
@@ -207,12 +210,15 @@ export const telegramNote = inngest.createFunction(
       voice?: { fileId: string; mimeType: string };
     };
     if (voice) {
-      await step.run("transcribe", () =>
-        transcribeNote(db, telegramBot(), sourceId, voice, {
+      await step.run("transcribe", async () => {
+        // 转写和写稿用同一个 Gemini 模型（工作台里改过就用改过的）
+        const { data: source } = await db.from("sources").select("org_id").eq("id", sourceId).single();
+        const ids = await orgModelIds(source?.org_id ?? null);
+        return transcribeNote(db, telegramBot(), sourceId, voice, {
           apiKey: requireEnv("GEMINI_API_KEY"),
-          model: process.env.GEMINI_MODEL,
-        }),
-      );
+          model: ids["gemini-flash"] || process.env.GEMINI_MODEL,
+        });
+      });
     }
     await step.run("digest", () => digestSource(db, getGateway(), sourceId));
 
@@ -237,6 +243,28 @@ export const telegramNote = inngest.createFunction(
     await step.run("mark-topic-used", async () => {
       await db.from("topics").update({ status: "used" }).eq("id", plan.topic.id);
     });
+    // 配图出不来不影响发稿：记下原因，稿子照样推回去。用谁出图在「账号与档案」里选
+    const image = await step.run("illustrate", async () => {
+      try {
+        const { data: org } = await db.from("orgs").select("settings").eq("id", plan.topic.org_id).single();
+        const settings = org?.settings as Org["settings"] | null;
+        const env = {
+          ...process.env,
+          GEMINI_IMAGE_MODEL: settings?.models?.image || process.env.GEMINI_IMAGE_MODEL,
+          OPENAI_IMAGE_MODEL: settings?.models?.openai_image || process.env.OPENAI_IMAGE_MODEL,
+        };
+        const generate =
+          process.env.GEMINI_IMAGE_MODEL === "off" ? null : imageGenerator(settings?.image_provider ?? "gemini", env);
+        if (!generate) return { url: null, error: null };
+        const url = await illustrate(db, ids, generate);
+        return { url, error: null };
+      } catch (err) {
+        return { url: null, error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+    if (image.error) {
+      await step.run("image-failed", () => telegramBot().send(`配图没出来，稿子照发：${image.error!.slice(0, 200)}`));
+    }
     const sent = await step.run("review", () => sendReviews(db, telegramBot(), ids));
     return { contents: ids.length, sent };
   },
