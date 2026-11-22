@@ -21,6 +21,7 @@ import { requireEnv } from "@/lib/env";
 import { TelegramBot } from "@/lib/telegram/bot";
 import { detectPlatform, normalizeSourceUrl, SUPPORTED_HINT } from "@/lib/sources/platforms";
 import type { SourceDigest } from "@/lib/sources/schema";
+import { isOrgUploadPath, UPLOAD_BUCKET, UPLOAD_URL_PREFIX } from "@/lib/sources/upload";
 import { EVENTS, inngest } from "@/inngest/client";
 
 // 所有写操作都用当前用户身份执行，RLS 保证只能动自己组织的数据。
@@ -258,6 +259,28 @@ export async function createSource(formData: FormData) {
   redirect(`/sources?id=${data.id}`);
 }
 
+/** 浏览器已经把文件传到 Storage（见 sources/upload-form.tsx），这里登记成素材并开始转写 */
+export async function createUploadedSource(path: string, fileName: string) {
+  const { supabase, org, workspace, user } = await requireSession();
+  if (!isOrgUploadPath(org.id, path)) throw new Error("上传路径不对");
+  const { data, error } = await supabase
+    .from("sources")
+    .insert({
+      org_id: org.id,
+      workspace_id: workspace.id,
+      url: `${UPLOAD_URL_PREFIX}${path}`,
+      platform: "file",
+      title: fileName.replace(/\.[^.]+$/, "").slice(0, 120),
+      storage_path: path,
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
+  if (error) redirect(`/sources?error=${encodeURIComponent(error.message)}`);
+  await inngest.send({ name: EVENTS.sourceRequested, data: { sourceId: data.id } });
+  redirect(`/sources?id=${data.id}`);
+}
+
 export async function retrySource(sourceId: string, formData: FormData) {
   const { supabase } = await requireSession();
   const patch: Record<string, unknown> = { status: "pending", error: null };
@@ -280,7 +303,8 @@ export async function retrySource(sourceId: string, formData: FormData) {
 
 export async function deleteSource(sourceId: string) {
   const { supabase } = await requireSession();
-  await supabase.from("sources").delete().eq("id", sourceId);
+  const { data } = await supabase.from("sources").delete().eq("id", sourceId).select("storage_path").maybeSingle();
+  if (data?.storage_path) await supabase.storage.from(UPLOAD_BUCKET).remove([data.storage_path]);
   redirect("/sources");
 }
 

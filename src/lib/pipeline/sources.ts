@@ -3,6 +3,7 @@ import { requireEnv } from "@/lib/env";
 import type { LlmGateway } from "@/lib/llm";
 import type { Source } from "@/lib/db/types";
 import { digestTranscript } from "@/lib/sources/digest";
+import { UPLOAD_BUCKET } from "@/lib/sources/upload";
 import {
   fetchMetadata,
   pollTranscript,
@@ -12,7 +13,7 @@ import {
   type TranscriptResult,
 } from "@/lib/sources/supadata";
 
-// 素材（链接转写）：元数据 → 文字稿（长视频异步，等 Supadata 转完）→ 模型整理。
+// 素材（链接转写、上传文件转写）：元数据 → 文字稿（长视频异步，等 Supadata 转完）→ 模型整理。
 // 每一步都把结果写回 sources 表，任务里只传小数据。
 // 没字幕、视频不公开这类重试也没用的失败直接记到 error，页面上给人看。
 
@@ -20,10 +21,14 @@ export function supadataFromEnv(): SupadataConfig {
   return { apiKey: requireEnv("SUPADATA_API_KEY") };
 }
 
-type SourceRow = Pick<Source, "id" | "org_id" | "url" | "platform" | "mode" | "title">;
+type SourceRow = Pick<Source, "id" | "org_id" | "url" | "platform" | "mode" | "title" | "storage_path">;
 
 export async function loadSource(db: SupabaseClient, id: string): Promise<SourceRow> {
-  const { data, error } = await db.from("sources").select("id, org_id, url, platform, mode, title").eq("id", id).single();
+  const { data, error } = await db
+    .from("sources")
+    .select("id, org_id, url, platform, mode, title, storage_path")
+    .eq("id", id)
+    .single();
   if (error) throw new Error(error.message);
   return data as SourceRow;
 }
@@ -63,9 +68,17 @@ async function settle(db: SupabaseClient, id: string, run: () => Promise<Transcr
   }
 }
 
+/** 上传的文件给 Supadata 一个 3 小时有效的下载链接；它拿到 jobId 后就不再需要这个链接 */
+async function transcribeUrl(db: SupabaseClient, source: SourceRow): Promise<string> {
+  if (!source.storage_path) return source.url;
+  const { data, error } = await db.storage.from(UPLOAD_BUCKET).createSignedUrl(source.storage_path, 3 * 3600);
+  if (error || !data) throw new SourceError(`找不到上传的文件${error ? `：${error.message}` : ""}`);
+  return data.signedUrl;
+}
+
 export async function startTranscript(db: SupabaseClient, source: SourceRow, config: SupadataConfig) {
   await update(db, source.id, { status: "transcribing", error: null });
-  return settle(db, source.id, () => requestTranscript(config, source.url, source.mode));
+  return settle(db, source.id, async () => requestTranscript(config, await transcribeUrl(db, source), source.mode));
 }
 
 export async function checkTranscript(db: SupabaseClient, sourceId: string, jobId: string, config: SupadataConfig) {

@@ -8,6 +8,7 @@ import { clock } from "@/lib/sources/digest";
 import { PLATFORM_LABELS, SUPPORTED_HINT, linkAt, type SourcePlatform } from "@/lib/sources/platforms";
 import { requireSession } from "@/lib/session";
 import { createSource, deleteSource, retrySource, writeFromSource } from "../actions";
+import { UploadForm } from "./upload-form";
 
 // 素材：贴一个视频或播客链接 → 文字稿 → 摘要、章节、要点、金句、爆款拆解 → 选一个角度直接写多平台文案。
 
@@ -50,7 +51,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export default async function SourcesPage({ searchParams }: PageProps<"/sources">) {
-  const { supabase } = await requireSession();
+  const { supabase, org } = await requireSession();
   const { id, error, sent } = await searchParams;
 
   const [{ data: rows }, { data: detail }, { data: accountRows }] = await Promise.all([
@@ -99,6 +100,9 @@ export default async function SourcesPage({ searchParams }: PageProps<"/sources"
             {SUPPORTED_HINT}取字幕 1 积分；AI 转写每分钟 2 积分（Supadata 免费档每月 100 积分）。转好后自动整理出摘要、章节、要点、金句和爆款拆解。
           </p>
         </form>
+        <div className="mt-4 border-t border-line pt-4">
+          <UploadForm orgId={org.id} />
+        </div>
       </Card>
 
       {typeof error === "string" ? <p className="mt-3 rounded-xl bg-bad-soft p-3 text-sm text-bad">{error}</p> : null}
@@ -112,7 +116,7 @@ export default async function SourcesPage({ searchParams }: PageProps<"/sources"
 
       <h2 className="mb-3 mt-8 text-lg font-bold">最近的素材</h2>
       {sources.length === 0 ? (
-        <Empty>还没有素材。贴一个 YouTube、TikTok 或播客音频链接试试；资讯雷达里的视频也可以直接点「转写」。</Empty>
+        <Empty>还没有素材。贴一个 YouTube、TikTok 或播客音频链接，或者上传一段本地录音试试；资讯雷达里的视频也可以直接点「转写」。</Empty>
       ) : (
         <div className="grid gap-3">
           {sources.map((s) => (
@@ -131,6 +135,16 @@ export default async function SourcesPage({ searchParams }: PageProps<"/sources"
   );
 }
 
+/** 时间点：贴链接的可以点开原视频（YouTube 跳到那一秒），上传的文件只显示时间 */
+function At({ source, seconds, className }: { source: Source; seconds: number; className: string }) {
+  if (source.storage_path) return <span className={`${className} tabular-nums text-muted`}>{clock(seconds)}</span>;
+  return (
+    <a href={linkAt(source.url, seconds)} target="_blank" rel="noreferrer" className={`${className} tabular-nums text-muted underline`}>
+      {clock(seconds)}
+    </a>
+  );
+}
+
 function SourceDetail({ source, accounts }: { source: Source; accounts: Account[] }) {
   const d = source.digest;
   return (
@@ -141,9 +155,13 @@ function SourceDetail({ source, accounts }: { source: Source; accounts: Account[
         {d?.title && source.title && d.title !== source.title ? <p className="text-sm text-muted">{source.title}</p> : null}
         <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted">
           {source.author ? <span>{source.author}</span> : null}
-          <a href={source.url} target="_blank" rel="noreferrer" className="underline">
-            原链接
-          </a>
+          {source.storage_path ? (
+            <span>本地上传</span>
+          ) : (
+            <a href={source.url} target="_blank" rel="noreferrer" className="underline">
+              原链接
+            </a>
+          )}
           {source.status === "ready" ? (
             <a href={`/api/sources/${source.id}/transcript`} className="underline">
               下载 Markdown
@@ -229,9 +247,7 @@ function SourceDetail({ source, accounts }: { source: Source; accounts: Account[
               <ul className="grid gap-2 text-sm">
                 {d.chapters.map((c, i) => (
                   <li key={i} className="flex gap-3">
-                    <a href={linkAt(source.url, c.start)} target="_blank" rel="noreferrer" className="shrink-0 tabular-nums text-muted underline">
-                      {clock(c.start)}
-                    </a>
+                    <At source={source} seconds={c.start} className="shrink-0" />
                     <span>
                       <span className="font-medium">{c.title}</span>
                       {c.summary ? <span className="text-muted">：{c.summary}</span> : null}
@@ -249,9 +265,7 @@ function SourceDetail({ source, accounts }: { source: Source; accounts: Account[
                   <blockquote key={i} className="border-l-4 border-line pl-3">
                     <p>{q.text}</p>
                     {q.zh ? <p className="text-muted">{q.zh}</p> : null}
-                    <a href={linkAt(source.url, q.start)} target="_blank" rel="noreferrer" className="text-xs tabular-nums text-muted underline">
-                      {clock(q.start)}
-                    </a>
+                    <At source={source} seconds={q.start} className="text-xs" />
                   </blockquote>
                 ))}
               </div>
@@ -267,9 +281,7 @@ function SourceDetail({ source, accounts }: { source: Source; accounts: Account[
             <div className="mt-3 grid gap-2 text-sm">
               {source.transcript.map((s, i) => (
                 <p key={i}>
-                  <a href={linkAt(source.url, s.start)} target="_blank" rel="noreferrer" className="mr-2 tabular-nums text-muted underline">
-                    {clock(s.start)}
-                  </a>
+                  <At source={source} seconds={s.start} className="mr-2" />
                   {s.text}
                 </p>
               ))}
