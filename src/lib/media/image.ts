@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-// 配图：在「账号与档案」里选用 Gemini（Nano Banana，和写稿共用 GEMINI_API_KEY）还是 ChatGPT（OpenAI 图片接口，
+// 配图：在「模型」页选用 Gemini（Nano Banana，和写稿共用 GEMINI_API_KEY）还是 ChatGPT（OpenAI 图片接口，
 // 要 OPENAI_API_KEY），或者不出图。图存进 Supabase Storage 的公开桶，https 链接放进内容的 media_urls，交给 Buffer 时带上。
 // 也可以在 TG 里回复一张自己做的图（比如在 ChatGPT 里做的）来换图，见 replaceImage。
 // https://ai.google.dev/gemini-api/docs/generate-content/image-generation
@@ -16,7 +16,7 @@ export type ImageProvider = "gemini" | "openai" | "off";
 
 export const IMAGE_PROVIDERS: Record<ImageProvider, string> = {
   gemini: "Gemini（和写稿共用一个 key）",
-  openai: "ChatGPT（OpenAI 图片接口，要 OPENAI_API_KEY）",
+  openai: "ChatGPT（OpenAI 图片接口，要 OpenAI 的 key）",
   off: "不出图",
 };
 
@@ -31,11 +31,11 @@ export function imageGenerator(
   if (provider === "off") return null;
   if (provider === "openai") {
     const apiKey = env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error("选了 ChatGPT 出图，但还没配 OPENAI_API_KEY");
+    if (!apiKey) throw new Error("选了 ChatGPT 出图，但还没有 OpenAI 的 key：到「模型」页贴一个");
     return (prompt) => generateOpenAiImage(prompt, { apiKey, model: env.OPENAI_IMAGE_MODEL, fetch: doFetch });
   }
   const apiKey = env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("没配 GEMINI_API_KEY");
+  if (!apiKey) throw new Error("Gemini 出图要 Gemini 的 key：到「模型」页贴一个");
   return (prompt) => generateImage(prompt, { apiKey, model: env.GEMINI_IMAGE_MODEL, fetch: doFetch });
 }
 

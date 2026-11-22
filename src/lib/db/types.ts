@@ -39,8 +39,17 @@ export interface OrgSettings {
   platforms?: Platform[];
   /** Telegram 线配图用谁出：gemini（默认）/ openai / off */
   image_provider?: "gemini" | "openai" | "off";
-  /** 在工作台里换模型 ID，不用重新部署；空着用环境变量或代码里的默认 */
-  models?: { text?: string; image?: string; openai_image?: string };
+  /** 在工作台「模型」页换模型，不用重新部署；空着用环境变量或代码里的默认 */
+  models?: {
+    /** 写稿用的模型，「厂商/模型名」或只写模型名 */
+    write?: string;
+    /** 整理、打标签、选题用的模型 */
+    assist?: string;
+    /** 旧版字段：写稿和整理共用的 Gemini 模型名，write / assist 没填时用它 */
+    text?: string;
+    image?: string;
+    openai_image?: string;
+  };
 }
 
 export interface Org {
@@ -78,6 +87,10 @@ export interface Account {
   token_ref: string | null;
   /** 经 Buffer 发布时的频道 id */
   buffer_channel_id: string | null;
+  /** Telegram 发来的笔记要不要给这个号写一份；默认要 */
+  telegram_enabled?: boolean;
+  /** 这个号写稿另用的模型；空着用「模型」页的写稿模型 */
+  model?: string | null;
 }
 
 export interface NewsItem {

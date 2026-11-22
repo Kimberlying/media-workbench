@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { BufferClient } from "@/lib/buffer/client";
 import { LlmGateway, type UsageRecord } from "@/lib/llm/gateway";
-import { directProviders } from "@/lib/llm/providers";
+import { PROVIDERS, parseModel } from "@/lib/llm/catalog";
 
 // 上线前用真 key 核对模型和 Buffer：npm run check:models（读 .env.local，会花几分钱；Buffer 只读频道，不发帖）。
 // 平时 npm test 不带 LIVE=1，这里整组跳过。
@@ -13,17 +13,21 @@ if (live && existsSync(".env.local")) process.loadEnvFile(".env.local");
 
 describe.skipIf(!live)("真实模型接口", () => {
   const records: UsageRecord[] = [];
-  const providers = live ? directProviders() : {};
   const gw = new LlmGateway({
-    providers,
     usage: { record: async (u) => void records.push(u) },
     xai: process.env.XAI_API_KEY
       ? { apiKey: process.env.XAI_API_KEY, model: process.env.XAI_MODEL || "grok-4.7" }
       : undefined,
   });
 
-  it.each(["grok", "gemini-flash"])("%s 能按 JSON 模式返回", { timeout: 60_000 }, async (alias) => {
-    expect(providers[alias], `没配 ${alias} 的 key`).toBeDefined();
+  // 配了哪家的 key 就测哪家；LIVE_MODELS 可以多测几个，例如 LIVE_MODELS=anthropic/claude-sonnet-5-5,openai/gpt-x
+  const extra = (process.env.LIVE_MODELS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  const models = ["grok", "gemini-flash", ...extra].filter((spec) => {
+    const ref = parseModel(spec);
+    return ref && process.env[PROVIDERS[ref.provider].env];
+  });
+
+  it.each(models.length ? models : ["gemini-flash"])("%s 能按 JSON 模式返回", { timeout: 60_000 }, async (alias) => {
     const out = await gw.generate({
       orgId: null,
       step: "copy.post",

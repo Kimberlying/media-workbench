@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/contents", label: "内容" },
   { href: "/analytics", label: "复盘" },
   { href: "/accounts", label: "账号与档案" },
+  { href: "/models", label: "模型" },
   { href: "/knowledge", label: "知识库" },
 ];
 

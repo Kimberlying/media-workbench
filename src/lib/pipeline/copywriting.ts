@@ -4,7 +4,6 @@ import { variantOf, type FormatSpec } from "@/lib/content/formats";
 import { checkXPost, finishXPost } from "@/lib/content/x-post";
 import type { Account, AccountProfile, Topic } from "@/lib/db/types";
 import type { ChatMessage, LlmGateway } from "@/lib/llm";
-import { modelFor } from "@/lib/llm/models";
 import { sourceMaterial } from "@/lib/sources/digest";
 import { checkBodyRepeatsCards, checkCards, checkRiskyClaims } from "@/lib/xhs/checks";
 import { buildWechatGraphicsPrompt, buildXhsPackPrompt, wechatAdaptation } from "@/lib/xhs/prompts";
@@ -152,7 +151,8 @@ async function generateOne(
 ): Promise<Generated> {
   const { account, profile, format } = target;
   const taboo = [...profile.taboo, ...knowledge.tabooWords];
-  const base = { orgId: account.org_id, refId: topic.id };
+  // 账号页给这个号另选了写稿模型就用它，否则用「模型」页的写稿模型
+  const base = { orgId: account.org_id, refId: topic.id, ...(account.model ? { model: account.model } : {}) };
 
   if (format.kind === "text") {
     const raw = await llm.generate({
@@ -164,7 +164,12 @@ async function generateOne(
     const body = finishXPost(raw);
     return {
       body,
-      pack: { kind: "post", model: modelFor(format.step), mode: "topic", checks: checkXPost(body) },
+      pack: {
+        kind: "post",
+        model: await llm.resolveModel({ ...base, step: format.step }),
+        mode: "topic",
+        checks: checkXPost(body),
+      },
       text: [body],
     };
   }

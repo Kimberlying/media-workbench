@@ -2,8 +2,15 @@ import { Card, PageHeader, buttonClass, ghostButtonClass, inputClass } from "@/c
 import { BufferClient, type BufferChannel } from "@/lib/buffer/client";
 import type { Account, AccountProfile } from "@/lib/db/types";
 import { requireSession } from "@/lib/session";
-import { DEFAULT_IMAGE_MODEL, DEFAULT_OPENAI_IMAGE_MODEL, IMAGE_PROVIDERS } from "@/lib/media/image";
-import { addManualAccount, saveProfile, setBufferChannel, saveModelSettings, setupCreatorTemplate } from "../actions";
+import { modelOptions } from "@/lib/llm/options";
+import {
+  addManualAccount,
+  importBufferChannels,
+  saveAccountOptions,
+  saveProfile,
+  setBufferChannel,
+  setupCreatorTemplate,
+} from "../actions";
 
 /** 配了 BUFFER_API_KEY 时列出 Buffer 里的频道，供每个账号选；读不到就手填频道 id */
 async function loadBufferChannels(): Promise<BufferChannel[] | null> {
@@ -29,14 +36,16 @@ const PLATFORM_LABELS = {
 
 export default async function AccountsPage({ searchParams }: PageProps<"/accounts">) {
   const { supabase, org, workspace } = await requireSession();
-  const { error } = await searchParams;
+  const { error, notice } = await searchParams;
 
   const { data } = await supabase
     .from("accounts")
     .select("*, profile:account_profiles(*)")
     .order("created_at");
   const accounts = (data ?? []) as (Account & { profile: AccountProfile | null })[];
-  const channels = await loadBufferChannels();
+  const [channels, options] = await Promise.all([loadBufferChannels(), modelOptions(org.id)]);
+  const bound = new Set(accounts.map((a) => a.buffer_channel_id).filter(Boolean));
+  const unbound = (channels ?? []).filter((ch) => !bound.has(ch.id));
 
   return (
     <>
@@ -46,6 +55,12 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
         </a>
       </PageHeader>
       {error ? <p className="mb-4 text-sm text-bad">{String(error)}</p> : null}
+      {notice ? <p className="mb-4 text-sm text-good">{String(notice)}</p> : null}
+      <datalist id="model-options">
+        {options.map((m) => (
+          <option key={m} value={m} />
+        ))}
+      </datalist>
 
       <div className="grid gap-4">
         {["x", "substack", "linkedin"].some((p) => !accounts.some((a) => a.platform === p)) ? (
@@ -70,61 +85,18 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
             </form>
           </Card>
         ) : null}
-        <Card>
-          <div className="mb-1 text-sm font-medium">模型和配图</div>
-          <p className="mb-3 text-sm text-muted">
-            模型名照 Gemini 或 OpenAI 文档里的写，空着用括号里的默认。出了新模型改这里保存就行，不用重新部署，一分钟内生效。
-          </p>
-          <form action={saveModelSettings} className="grid gap-3 md:grid-cols-2">
-            <label className="grid gap-1 text-sm">
-              <span className="text-muted">写稿和语音转写（Gemini）</span>
-              <input
-                name="text"
-                defaultValue={org.settings.models?.text ?? ""}
-                placeholder={`默认 ${process.env.GEMINI_MODEL || "gemini-3.8-flash"}`}
-                className={inputClass}
-              />
-            </label>
-            <label className="grid gap-1 text-sm">
-              <span className="text-muted">Telegram 线配图用</span>
-              <select name="image_provider" defaultValue={org.settings.image_provider ?? "gemini"} className={inputClass}>
-                {Object.entries(IMAGE_PROVIDERS).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="grid gap-1 text-sm">
-              <span className="text-muted">Gemini 出图模型</span>
-              <input
-                name="image"
-                defaultValue={org.settings.models?.image ?? ""}
-                placeholder={`默认 ${process.env.GEMINI_IMAGE_MODEL || DEFAULT_IMAGE_MODEL}`}
-                className={inputClass}
-              />
-            </label>
-            <label className="grid gap-1 text-sm">
-              <span className="text-muted">ChatGPT 出图模型</span>
-              <input
-                name="openai_image"
-                defaultValue={org.settings.models?.openai_image ?? ""}
-                placeholder={`默认 ${process.env.OPENAI_IMAGE_MODEL || DEFAULT_OPENAI_IMAGE_MODEL}`}
-                className={inputClass}
-              />
-            </label>
-            <div className="md:col-span-2">
-              <button className={buttonClass}>保存</button>
-            </div>
-          </form>
-          <p className="mt-3 text-sm text-muted">
-            ChatGPT 会员不能给服务器调用，选 ChatGPT 出图要另办 OpenAI API key（单独计费）。不办也行：在 ChatGPT
-            里做好图，在 Telegram 里回复那条稿子发这张图，就会换上。
-            {org.settings.image_provider === "openai" && !process.env.OPENAI_API_KEY ? (
-              <span className="text-bad"> 现在还没配 OPENAI_API_KEY，出图会失败。</span>
-            ) : null}
-          </p>
-        </Card>
+        {unbound.length ? (
+          <Card>
+            <div className="mb-1 text-sm font-medium">从 Buffer 导入账号</div>
+            <p className="mb-3 text-sm text-muted">
+              Buffer 里还有 {unbound.length} 个频道没加进来：{unbound.map((ch) => `${ch.name}（${ch.service}）`).join("、")}。
+              同一个平台可以有好几个号，先在 Buffer 里连好，再点这里一次加进来、绑好频道。新号会复制同平台第一个号的档案，之后再改。
+            </p>
+            <form action={importBufferChannels}>
+              <button className={buttonClass}>全部导入</button>
+            </form>
+          </Card>
+        ) : null}
         {accounts.map((a) => (
           <Card key={a.id}>
             <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -162,6 +134,27 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
               )}
               <button className={ghostButtonClass}>保存</button>
             </form>
+            <form
+              action={saveAccountOptions.bind(null, a.id)}
+              className="mb-3 flex flex-wrap items-center gap-3 text-sm"
+            >
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="telegram_enabled" defaultChecked={a.telegram_enabled !== false} />
+                <span className="text-muted">Telegram 发来的笔记也给这个号写一份</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="text-muted">写稿模型</span>
+                <input
+                  name="model"
+                  list="model-options"
+                  defaultValue={a.model ?? ""}
+                  placeholder="空着用「模型」页的"
+                  autoComplete="off"
+                  className={`${inputClass} w-64`}
+                />
+              </label>
+              <button className={ghostButtonClass}>保存</button>
+            </form>
             <form action={saveProfile.bind(null, a.id)} className="grid gap-3 md:grid-cols-2">
               <Field label="账号定位" name="positioning" value={a.profile?.positioning} rows={2} />
               <Field label="目标受众" name="audience" value={a.profile?.audience} rows={2} />
@@ -184,16 +177,18 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
         ))}
 
         <Card>
-          <div className="mb-2 text-sm font-medium">添加人工发布的账号</div>
+          <div className="mb-1 text-sm font-medium">添加账号</div>
+          <p className="mb-3 text-sm text-muted">
+            同一个平台可以加好几个号。加好后绑上 Buffer 频道就能经 Buffer 发；不绑就出发布包人工发。新号会复制同平台第一个号的档案。
+            给 Telegram 机器人发笔记时开头写 @账号名（可以写几个），就只给这几个号写。
+          </p>
           <form action={addManualAccount} className="flex flex-wrap items-center gap-2">
             <select name="platform" className={`${inputClass} w-auto`}>
-              {Object.entries(PLATFORM_LABELS)
-                .filter(([key]) => key !== "x")
-                .map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
+              {Object.entries(PLATFORM_LABELS).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
             </select>
             <input name="handle" placeholder="账号名" className={`${inputClass} w-48`} />
             <button className={ghostButtonClass}>添加</button>
